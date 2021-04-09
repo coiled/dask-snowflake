@@ -43,7 +43,7 @@ def to_snowflake(
     account: str,
     database: str,
     schema: str,
-    warehouse: str
+    warehouse: str,
 ):
     engine_kwargs = {
         "name": name,
@@ -71,7 +71,7 @@ def read_snowflake(
     account: str,
     database: str,
     schema: str,
-    warehouse: str
+    warehouse: str,
 ):
     engine = create_engine(
         URL(

@@ -1,0 +1,4 @@
+dask
+distributed
+snowflake-connector-python[pandas]
+snowflake-sqlalchemy

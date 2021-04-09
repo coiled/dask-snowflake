@@ -9,7 +9,7 @@ from sqlalchemy import create_engine
 import dask.dataframe as dd
 from distributed import Client
 
-from core import read_snowflake, to_snowflake
+from dask_snowflake import read_snowflake, to_snowflake
 
 
 # FIXME: It seems there are thread-safety issues
@@ -19,12 +19,11 @@ client = Client(threads_per_worker=1)
 @pytest.fixture
 def table(credentials):
     name = f"test_table_{uuid.uuid4().hex}".upper()
-    
+
     yield name
 
     engine = create_engine(URL(**credentials))
     engine.execute(f"DROP TABLE {name}")
-
 
 
 @pytest.fixture(scope="module")

@@ -12,8 +12,7 @@ from distributed import Client
 from dask_snowflake import read_snowflake, to_snowflake
 
 
-# FIXME: It seems there are thread-safety issues
-client = Client(threads_per_worker=1)
+client = Client(n_workers=2, threads_per_worker=10)
 
 
 @pytest.fixture
@@ -41,8 +40,8 @@ def credentials():
 def test_write_read_roundtrip(table, credentials):
 
     # TODO: Find out if snowflake supports lower-case column names
-    df = pd.DataFrame({"A": range(10), "B": range(10, 20)})
-    ddf = dd.from_pandas(df, npartitions=5)
+    df = pd.DataFrame({"A": range(100), "B": range(100, 200)})
+    ddf = dd.from_pandas(df, npartitions=50)
 
     to_snowflake(ddf, name=table, **credentials)
     df_out = read_snowflake(name=table, **credentials)

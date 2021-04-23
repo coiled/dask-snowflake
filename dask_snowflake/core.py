@@ -1,8 +1,8 @@
 import pandas as pd
 import snowflake.connector
+from snowflake.connector.pandas_tools import pd_writer, write_pandas
 from snowflake.sqlalchemy import URL
 from sqlalchemy import create_engine
-from snowflake.connector.pandas_tools import pd_writer, write_pandas
 
 import dask
 import dask.dataframe as dd

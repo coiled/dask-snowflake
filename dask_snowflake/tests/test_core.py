@@ -11,7 +11,6 @@ from distributed import Client
 
 from dask_snowflake import read_snowflake, to_snowflake
 
-
 client = Client(n_workers=2, threads_per_worker=10)
 
 

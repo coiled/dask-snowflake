@@ -14,6 +14,9 @@ RUN conda install --yes \
     cxx-compiler \
     dask \
     distributed \
+    xgboost \
+    dask-ml \
+    xarray \
     pyarrow==3.0 \
     tini \
     && \
@@ -32,6 +35,12 @@ RUN ./compile_snowflake.sh \
     && pip install dist/*.whl \
     && rm -rf dist \
     rm compile_snowflake.sh
+
+RUN mkdir dask-snowflake
+
+WORKDIR /workspace
+COPY * dask_snowflake/
+RUN pip install ./dask_snowflake
 
 
 ENTRYPOINT ["tini", "-g", "--"]

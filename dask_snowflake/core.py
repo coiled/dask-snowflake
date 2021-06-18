@@ -1,9 +1,8 @@
+from functools import partial
 from typing import Dict, Optional
 
 import pandas as pd
-import pyarrow as pa
 import snowflake.connector
-from snowflake.connector import SnowflakeConnection
 from snowflake.connector.pandas_tools import pd_writer, write_pandas
 from snowflake.connector.result_batch import ArrowResultBatch
 from snowflake.sqlalchemy import URL
@@ -11,7 +10,11 @@ from sqlalchemy import create_engine
 
 import dask
 import dask.dataframe as dd
+from dask.base import tokenize
+from dask.dataframe.core import new_dd_object
 from dask.delayed import delayed
+from dask.highlevelgraph import HighLevelGraph
+from dask.layers import DataFrameIOLayer
 from dask.utils import SerializableLock
 
 
@@ -110,13 +113,11 @@ def to_snowflake(
 
 
 def _fetch_snowflake_batch(chunk: ArrowResultBatch, arrow_options: Dict):
-    return pa.concat_tables(chunk.create_iter(iter_unit="table")).to_pandas(
-        **arrow_options
-    )
+    return chunk.to_arrow().to_pandas(**arrow_options)
 
 
 def read_snowflake(
-    query: str, connection_args: SnowflakeConnection, arrow_options: Optional[Dict] = None
+    query: str, connection_args: Dict, arrow_options: Optional[Dict] = None
 ) -> dd.DataFrame:
     """
     Generate a dask.DataFrame based of the result of a snowflakeDB query.
@@ -151,6 +152,14 @@ def read_snowflake(
     ddf
 
     """
+    label = "read-snowflake-"
+    output_name = label + tokenize(
+        query,
+        connection_args,
+        arrow_options,
+    )
+
+    # TODO: Add partner connect ID
     with snowflake.connector.connect(**connection_args) as conn:
         with conn.cursor() as cur:
             cur.check_can_use_pandas()
@@ -165,16 +174,28 @@ def read_snowflake(
     filtered_batches = [b for b in batches if b.uncompressed_size]
 
     meta = None
-    for b in batches:
+    for b in filtered_batches:
         if not isinstance(b, ArrowResultBatch):
             # This should never since the above check_can_use* calls should
             # raise before if arrow is not properly setup
             raise RuntimeError(f"Received unknown result batch type {type(b)}")
-        meta = b.schema.to_pandas(**arrow_options)
+        meta = b.to_pandas()
         break
 
-    fetch_delayed = dask.delayed(_fetch_snowflake_batch)
-    return dd.from_delayed(
-        [fetch_delayed(c, arrow_options=arrow_options) for c in filtered_batches],
-        meta=meta,
-    )
+    if not filtered_batches:
+        # empty dataframe - just use meta
+        graph = {(output_name, 0): meta}
+        divisions = (None, None)
+    else:
+        # Create Blockwise layer
+        layer = DataFrameIOLayer(
+            output_name,
+            meta.columns,
+            filtered_batches,
+            # TODO: Implement wrapper to only convert columns requested
+            partial(_fetch_snowflake_batch, arrow_options=arrow_options),
+            label=label,
+        )
+        divisions = tuple([None] * (len(filtered_batches) + 1))
+        graph = HighLevelGraph({output_name: layer}, {output_name: set()})
+    return new_dd_object(graph, output_name, meta, divisions)

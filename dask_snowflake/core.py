@@ -116,7 +116,7 @@ def _fetch_snowflake_batch(chunk: ArrowResultBatch, arrow_options: Dict):
 
 
 def read_snowflake(
-    query: str, conn: SnowflakeConnection, arrow_options: Optional[Dict] = None
+    query: str, connection_args: SnowflakeConnection, arrow_options: Optional[Dict] = None
 ) -> dd.DataFrame:
     """
     Generate a dask.DataFrame based of the result of a snowflakeDB query.
@@ -138,43 +138,39 @@ def read_snowflake(
         SELECT *
         FROM SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.CUSTOMER;
     '''
-    import snowflake.connector
     from dask_snowflake.core import read_snowflake
 
-    with snowflake.connector.connect(
-        user="XXX",
-        password="XXX",
-        account="XXX",
-    ) as conn:
-        ddf = read_snowflake(
-            query=example_query,
-            conn=conn,
-        )
-        ddf
+    ddf = read_snowflake(
+        query=example_query,
+        connection_args={
+            "user": "XXX",
+            "password": "XXX",
+            "account": "XXX",
+        }
+    )
+    ddf
 
     """
-    with conn.cursor() as cur:
-        cur.check_can_use_pandas()
-        cur.check_can_use_arrow_resultset()
-        cur.execute(query)
-        batches = cur.get_result_batches()
+    with snowflake.connector.connect(**connection_args) as conn:
+        with conn.cursor() as cur:
+            cur.check_can_use_pandas()
+            cur.check_can_use_arrow_resultset()
+            cur.execute(query)
+            batches = cur.get_result_batches()
 
     if arrow_options is None:
         arrow_options = {}
 
     # There are sometimes null batches
     filtered_batches = [b for b in batches if b.uncompressed_size]
-    if not filtered_batches:
-        # TODO: How to gracefully handle empty results?
-        raise NotImplementedError("Empty result")
 
     meta = None
-    for b in filtered_batches:
+    for b in batches:
         if not isinstance(b, ArrowResultBatch):
             # This should never since the above check_can_use* calls should
             # raise before if arrow is not properly setup
             raise RuntimeError(f"Received unknown result batch type {type(b)}")
-        meta = _fetch_snowflake_batch(b, arrow_options=arrow_options)
+        meta = b.schema.to_pandas(**arrow_options)
         break
 
     fetch_delayed = dask.delayed(_fetch_snowflake_batch)

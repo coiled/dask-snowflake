@@ -171,7 +171,7 @@ def read_snowflake(
         arrow_options = {}
 
     # There are sometimes null batches
-    filtered_batches = [b for b in batches if b.uncompressed_size]
+    filtered_batches = batches
 
     meta = None
     for b in filtered_batches:

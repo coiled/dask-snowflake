@@ -1,9 +1,9 @@
-FROM mambaorg/micromamba
+FROM mambaorg/micromamba:0.11.3
 
 RUN mkdir /workspace
 
 
-RUN conda install --yes \
+RUN micromamba install --yes \
     -c conda-forge \
     nomkl \
     git \
@@ -17,10 +17,10 @@ RUN conda install --yes \
     xgboost \
     dask-ml \
     xarray \
-    pyarrow==3.0 \
+    pyarrow \
     tini \
     && \
-    conda clean --all --yes
+    micromamba clean --all --yes
 
 
 WORKDIR /workspace

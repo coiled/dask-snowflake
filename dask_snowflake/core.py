@@ -1,9 +1,8 @@
+from functools import partial
 from typing import Dict, Optional
 
 import pandas as pd
-import pyarrow as pa
 import snowflake.connector
-from snowflake.connector import SnowflakeConnection
 from snowflake.connector.pandas_tools import pd_writer, write_pandas
 from snowflake.connector.result_batch import ArrowResultBatch
 from snowflake.sqlalchemy import URL
@@ -11,7 +10,11 @@ from sqlalchemy import create_engine
 
 import dask
 import dask.dataframe as dd
+from dask.base import tokenize
+from dask.dataframe.core import new_dd_object
 from dask.delayed import delayed
+from dask.highlevelgraph import HighLevelGraph
+from dask.layers import DataFrameIOLayer
 from dask.utils import SerializableLock
 
 
@@ -110,13 +113,11 @@ def to_snowflake(
 
 
 def _fetch_snowflake_batch(chunk: ArrowResultBatch, arrow_options: Dict):
-    return pa.concat_tables(chunk.create_iter(iter_unit="table")).to_pandas(
-        **arrow_options
-    )
+    return chunk.to_arrow().to_pandas(**arrow_options)
 
 
 def read_snowflake(
-    query: str, conn: SnowflakeConnection, arrow_options: Optional[Dict] = None
+    query: str, connection_args: Dict, arrow_options: Optional[Dict] = None
 ) -> dd.DataFrame:
     """
     Generate a dask.DataFrame based of the result of a snowflakeDB query.
@@ -138,35 +139,39 @@ def read_snowflake(
         SELECT *
         FROM SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.CUSTOMER;
     '''
-    import snowflake.connector
     from dask_snowflake.core import read_snowflake
 
-    with snowflake.connector.connect(
-        user="XXX",
-        password="XXX",
-        account="XXX",
-    ) as conn:
-        ddf = read_snowflake(
-            query=example_query,
-            conn=conn,
-        )
-        ddf
+    ddf = read_snowflake(
+        query=example_query,
+        connection_args={
+            "user": "XXX",
+            "password": "XXX",
+            "account": "XXX",
+        }
+    )
+    ddf
 
     """
-    with conn.cursor() as cur:
-        cur.check_can_use_pandas()
-        cur.check_can_use_arrow_resultset()
-        cur.execute(query)
-        batches = cur.get_result_batches()
+    label = "read-snowflake-"
+    output_name = label + tokenize(
+        query,
+        connection_args,
+        arrow_options,
+    )
+
+    # TODO: Add partner connect ID
+    with snowflake.connector.connect(**connection_args) as conn:
+        with conn.cursor() as cur:
+            cur.check_can_use_pandas()
+            cur.check_can_use_arrow_resultset()
+            cur.execute(query)
+            batches = cur.get_result_batches()
 
     if arrow_options is None:
         arrow_options = {}
 
     # There are sometimes null batches
     filtered_batches = [b for b in batches if b.uncompressed_size]
-    if not filtered_batches:
-        # TODO: How to gracefully handle empty results?
-        raise NotImplementedError("Empty result")
 
     meta = None
     for b in filtered_batches:
@@ -174,11 +179,23 @@ def read_snowflake(
             # This should never since the above check_can_use* calls should
             # raise before if arrow is not properly setup
             raise RuntimeError(f"Received unknown result batch type {type(b)}")
-        meta = _fetch_snowflake_batch(b, arrow_options=arrow_options)
+        meta = b.to_pandas()
         break
 
-    fetch_delayed = dask.delayed(_fetch_snowflake_batch)
-    return dd.from_delayed(
-        [fetch_delayed(c, arrow_options=arrow_options) for c in filtered_batches],
-        meta=meta,
-    )
+    if not filtered_batches:
+        # empty dataframe - just use meta
+        graph = {(output_name, 0): meta}
+        divisions = (None, None)
+    else:
+        # Create Blockwise layer
+        layer = DataFrameIOLayer(
+            output_name,
+            meta.columns,
+            filtered_batches,
+            # TODO: Implement wrapper to only convert columns requested
+            partial(_fetch_snowflake_batch, arrow_options=arrow_options),
+            label=label,
+        )
+        divisions = tuple([None] * (len(filtered_batches) + 1))
+        graph = HighLevelGraph({output_name: layer}, {output_name: set()})
+    return new_dd_object(graph, output_name, meta, divisions)

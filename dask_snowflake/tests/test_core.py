@@ -43,7 +43,8 @@ def test_write_read_roundtrip(table, credentials):
     ddf = dd.from_pandas(df, npartitions=50)
 
     to_snowflake(ddf, name=table, **credentials)
-    df_out = read_snowflake(name=table, **credentials)
+    query = f"SELECT * FROM {table}"
+    df_out = read_snowflake(query, connection_args=credentials)
     # FIXME: Why does read_snowflake return lower-case columns names?
     df_out.columns = df_out.columns.str.upper()
     # FIXME: We need to sort the DataFrame because paritions are written

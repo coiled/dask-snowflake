@@ -46,6 +46,7 @@ def write_snowflake(
         write_pandas(
             conn=conn,
             df=df,
+            schema=schema,
             # NOTE: since ensure_db_exists uses uppercase for the table name
             table_name=name.upper(),
             parallel=1,
@@ -74,14 +75,18 @@ def ensure_db_exists(
             password=password,
             account=account,
             database=database,
-            schema=schema,
             warehouse=warehouse,
             numpy=True,
         )
     )
     # NOTE: pd_writer will automatically uppercase the table name
     df._meta.to_sql(
-        name=name, con=engine, index=False, if_exists="append", method=pd_writer
+        name=name,
+        schema=schema,
+        con=engine,
+        index=False,
+        if_exists="append",
+        method=pd_writer,
     )
 
 

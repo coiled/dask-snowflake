@@ -38,7 +38,7 @@ def write_snowflake(
         schema=schema,
         warehouse=warehouse,
         # TODO: Set partner connect ID / application to dask once public
-        application=dask.config.get("snowflake.partner", "Coiled"),
+        application=dask.config.get("snowflake.partner", "Coiled_Cloud"),
     )
     # NOTE: Use a process-wide lock to avoid a `boto` multithreading issue
     # https://github.com/snowflakedb/snowflake-connector-python/issues/156
@@ -163,7 +163,9 @@ def read_snowflake(
 
     if "application" not in connection_args:
         # TODO: Set partner connect ID / application to dask once public
-        connection_args["application"] = dask.config.get("snowflake.partner", "Coiled")
+        connection_args["application"] = dask.config.get(
+            "snowflake.partner", "Coiled_Cloud"
+        )
 
     output_name = label + tokenize(
         query,

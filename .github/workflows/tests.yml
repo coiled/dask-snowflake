@@ -1,0 +1,42 @@
+name: Tests
+
+on: [pull_request]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash -l {0}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["windows-latest", "ubuntu-latest", "macos-latest"]
+        python-version: ["3.7", "3.8", "3.9"]
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v2
+
+      - name: Setup Conda Environment
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          miniforge-variant: Mambaforge
+          miniforge-version: latest
+          use-mamba: true
+          channel-priority: strict
+          python-version: ${{ matrix.python-version }}
+          environment-file: ci/environment-${{ matrix.python-version }}.yaml
+          activate-environment: test-environment
+          auto-activate-base: false
+
+      - name: Install dask_snowflake
+        run: python -m pip install -e .
+
+      - name: Run tests
+        env:
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+        run: pytest dask_snowflake

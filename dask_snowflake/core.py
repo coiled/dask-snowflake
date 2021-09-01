@@ -20,69 +20,40 @@ from dask.utils import SerializableLock
 
 @delayed
 def write_snowflake(
-    df: pd.DataFrame,
-    *,
+    df: dd.DataFrame,
     name: str,
-    user: str,
-    password: str,
-    account: str,
-    database: str,
-    schema: str,
-    warehouse: str,
+    connection_kwargs: Dict,
 ):
-    conn = snowflake.connector.connect(
-        user=user,
-        password=password,
-        account=account,
-        database=database,
-        schema=schema,
-        warehouse=warehouse,
-        # TODO: Set partner connect ID / application to dask once public
-        application=dask.config.get("snowflake.partner", "Coiled_Cloud"),
-    )
-    # NOTE: Use a process-wide lock to avoid a `boto` multithreading issue
-    # https://github.com/snowflakedb/snowflake-connector-python/issues/156
-    with SerializableLock(token="write_snowflake"):
-        write_pandas(
-            conn=conn,
-            df=df,
-            schema=schema,
-            # NOTE: since ensure_db_exists uses uppercase for the table name
-            table_name=name.upper(),
-            parallel=1,
-        )
+    with snowflake.connector.connect(**connection_kwargs) as conn:
+        # NOTE: Use a process-wide lock to avoid a `boto` multithreading issue
+        # https://github.com/snowflakedb/snowflake-connector-python/issues/156
+        with SerializableLock(token="write_snowflake"):
+            write_pandas(
+                conn=conn,
+                df=df,
+                schema=connection_kwargs.get("schema", None),
+                # NOTE: since ensure_db_exists uses uppercase for the table name
+                table_name=name.upper(),
+                parallel=1,
+                quote_identifiers=False,
+            )
 
 
 def ensure_db_exists(
-    df: dd.DataFrame,
-    *,
+    df: pd.DataFrame,
     name: str,
-    user: str,
-    password: str,
-    account: str,
-    database: str,
-    schema: str,
-    warehouse: str,
+    connection_kwargs,
 ):
     # NOTE: we have a separate `ensure_db_exists` function in order to use
     # pandas' `to_sql` which will create a table if the requested one doesn't
     # already exist. However, we don't always want to Snowflake's `pd_writer`
     # approach because it doesn't allow us disable parallel file uploading.
     # For these cases we use a separate `write_snowflake` function.
-    engine = create_engine(
-        URL(
-            user=user,
-            password=password,
-            account=account,
-            database=database,
-            warehouse=warehouse,
-            numpy=True,
-        )
-    )
-    # NOTE: pd_writer will automatically uppercase the table name
+    engine = create_engine(URL(**connection_kwargs))
+    # # NOTE: pd_writer will automatically uppercase the table name
     df._meta.to_sql(
         name=name,
-        schema=schema,
+        schema=connection_kwargs.get("schema", None),
         con=engine,
         index=False,
         if_exists="append",
@@ -91,40 +62,28 @@ def ensure_db_exists(
 
 
 def to_snowflake(
-    df,
-    *,
+    df: dd.DataFrame,
     name: str,
-    user: str,
-    password: str,
-    account: str,
-    database: str,
-    schema: str,
-    warehouse: str,
+    connection_kwargs: Dict,
 ):
-    storage_options = {
-        "name": name,
-        "user": user,
-        "password": password,
-        "account": account,
-        "database": database,
-        "schema": schema,
-        "warehouse": warehouse,
-    }
     # Write the DataFrame meta to ensure table exists before
     # trying to write all partitions in parallel. Otherwise
     # we run into race conditions around creating a new table.
-    ensure_db_exists(df, **storage_options)
+    ensure_db_exists(df, name, connection_kwargs)
     dask.compute(
-        [write_snowflake(partition, **storage_options) for partition in df.to_delayed()]
+        [
+            write_snowflake(partition, name, connection_kwargs)
+            for partition in df.to_delayed()
+        ]
     )
 
 
 def _fetch_snowflake_batch(chunk: ArrowResultBatch, arrow_options: Dict):
-    return chunk.to_arrow().to_pandas(**arrow_options)
+    return chunk.to_pandas(**arrow_options)
 
 
 def read_snowflake(
-    query: str, connection_args: Dict, arrow_options: Optional[Dict] = None
+    query: str, connection_kwargs: Dict, arrow_options: Optional[Dict] = None
 ) -> dd.DataFrame:
     """
     Generate a dask.DataFrame based of the result of a snowflakeDB query.
@@ -150,7 +109,7 @@ def read_snowflake(
 
     ddf = read_snowflake(
         query=example_query,
-        connection_args={
+        connection_kwargs={
             "user": "XXX",
             "password": "XXX",
             "account": "XXX",
@@ -159,21 +118,20 @@ def read_snowflake(
     ddf
 
     """
-    label = "read-snowflake-"
-
-    if "application" not in connection_args:
+    if "application" not in connection_kwargs:
         # TODO: Set partner connect ID / application to dask once public
-        connection_args["application"] = dask.config.get(
+        connection_kwargs["application"] = dask.config.get(
             "snowflake.partner", "Coiled_Cloud"
         )
 
+    label = "read-snowflake-"
     output_name = label + tokenize(
         query,
-        connection_args,
+        connection_kwargs,
         arrow_options,
     )
 
-    with snowflake.connector.connect(**connection_args) as conn:
+    with snowflake.connector.connect(**connection_kwargs) as conn:
         with conn.cursor() as cur:
             cur.check_can_use_pandas()
             cur.check_can_use_arrow_resultset()
@@ -183,11 +141,8 @@ def read_snowflake(
     if arrow_options is None:
         arrow_options = {}
 
-    # There are sometimes null batches
-    filtered_batches = [b for b in batches if b.uncompressed_size]
-
     meta = None
-    for b in filtered_batches:
+    for b in batches:
         if not isinstance(b, ArrowResultBatch):
             # This should never since the above check_can_use* calls should
             # raise before if arrow is not properly setup
@@ -195,7 +150,7 @@ def read_snowflake(
         meta = b.to_pandas()
         break
 
-    if not filtered_batches:
+    if not batches:
         # empty dataframe - just use meta
         graph = {(output_name, 0): meta}
         divisions = (None, None)
@@ -204,11 +159,11 @@ def read_snowflake(
         layer = DataFrameIOLayer(
             output_name,
             meta.columns,
-            filtered_batches,
+            batches,
             # TODO: Implement wrapper to only convert columns requested
             partial(_fetch_snowflake_batch, arrow_options=arrow_options),
             label=label,
         )
-        divisions = tuple([None] * (len(filtered_batches) + 1))
+        divisions = tuple([None] * (len(batches) + 1))
         graph = HighLevelGraph({output_name: layer}, {output_name: set()})
     return new_dd_object(graph, output_name, meta, divisions)

@@ -71,6 +71,34 @@ def to_snowflake(
     name: str,
     connection_kwargs: Dict,
 ):
+    """Write a Dask DataFrame to a Snowflake table.
+
+    Parameters
+    ----------
+    df:
+        Dask DataFrame to save.
+    name:
+        Name of the table to save to.
+    connection_kwargs:
+        Connection arguments used when connecting to Snowflake with
+        ``snowflake.connector.connect``.
+
+    Examples
+    --------
+
+    >>> from dask_snowflake import to_snowflake
+    >>> df = ...  # Create a Dask DataFrame
+    >>> to_snowflake(
+    ...     df,
+    ...     name="my_table",
+    ...     connection_kwargs={
+    ...         "user": "...",
+    ...         "password": "...",
+    ...         "account": "...",
+    ...     },
+    ... )
+
+    """
     # Write the DataFrame meta to ensure table exists before
     # trying to write all partitions in parallel. Otherwise
     # we run into race conditions around creating a new table.
@@ -90,37 +118,35 @@ def _fetch_snowflake_batch(chunk: ArrowResultBatch, arrow_options: Dict):
 def read_snowflake(
     query: str, connection_kwargs: Dict, arrow_options: Optional[Dict] = None
 ) -> dd.DataFrame:
-    """
-    Generate a dask.DataFrame based of the result of a snowflakeDB query.
-
+    """Load a Dask DataFrame based of the result of a Snowflake query.
 
     Parameters
     ----------
     query:
-        The snowflake DB query to execute
-    conn:
-        An already established connnection to the database
+        The Snowflake query to execute.
+    connection_kwargs:
+        Connection arguments used when connecting to Snowflake with
+        ``snowflake.connector.connect``.
     arrow_options:
-        Optional arguments provided to the arrow.Table.to_pandas method
+        Optional arguments forwarded to ``arrow.Table.to_pandas`` when
+        converting data to a pandas DataFrame.
 
     Examples
     --------
 
-    example_query = '''
-        SELECT *
-        FROM SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.CUSTOMER;
-    '''
-    from dask_snowflake.core import read_snowflake
-
-    ddf = read_snowflake(
-        query=example_query,
-        connection_kwargs={
-            "user": "XXX",
-            "password": "XXX",
-            "account": "XXX",
-        }
-    )
-    ddf
+    >>> from dask_snowflake import read_snowflake
+    >>> example_query = '''
+    ...    SELECT *
+    ...    FROM SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.CUSTOMER;
+    ... '''
+    >>> ddf = read_snowflake(
+    ...     query=example_query,
+    ...     connection_kwargs={
+    ...         "user": "...",
+    ...         "password": "...",
+    ...         "account": "...",
+    ...     },
+    ... )
 
     """
     if "application" not in connection_kwargs:

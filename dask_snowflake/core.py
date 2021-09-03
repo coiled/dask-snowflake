@@ -71,7 +71,7 @@ def to_snowflake(
     name: str,
     connection_kwargs: Dict,
 ):
-    """Save a Dask DataFrame to a Snowflake table.
+    """Write a Dask DataFrame to a Snowflake table.
 
     Parameters
     ----------
@@ -118,7 +118,7 @@ def _fetch_snowflake_batch(chunk: ArrowResultBatch, arrow_options: Dict):
 def read_snowflake(
     query: str, connection_kwargs: Dict, arrow_options: Optional[Dict] = None
 ) -> dd.DataFrame:
-    """Generate a Dask DataFrame based of the result of a Snowflake query.
+    """Load a Dask DataFrame based of the result of a Snowflake query.
 
     Parameters
     ----------

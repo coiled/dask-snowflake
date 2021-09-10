@@ -1,14 +1,17 @@
 #!/usr/bin/env python
 
-from setuptools import find_packages, setup
+from setuptools import setup
 
 setup(
     name="dask-snowflake",
     version="0.0.1",
     description="Dask + Snowflake intergration",
-    license="MIT",
-    packages=find_packages(),
+    license="BSD",
+    maintainer="James Bourbeau",
+    maintainer_email="james@coiled.io",
+    packages=["dask_snowflake"],
     long_description=open("README.md").read(),
+    long_description_content_type="text/markdown",
     python_requires=">=3.7",
     install_requires=open("requirements.txt").read().strip().split("\n"),
     include_package_data=True,

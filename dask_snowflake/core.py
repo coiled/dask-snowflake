@@ -152,7 +152,7 @@ def read_snowflake(
     if "application" not in connection_kwargs:
         # TODO: Set partner connect ID / application to dask once public
         connection_kwargs["application"] = dask.config.get(
-            "snowflake.partner", "Coiled_Cloud"
+            "snowflake.partner", "dask"
         )
 
     label = "read-snowflake-"

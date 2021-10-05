@@ -51,7 +51,7 @@ def ensure_db_exists(
 ):
     # NOTE: we have a separate `ensure_db_exists` function in order to use
     # pandas' `to_sql` which will create a table if the requested one doesn't
-    # already exist. However, we don't always want to Snowflake's `pd_writer`
+    # already exist. However, we don't always want to use Snowflake's `pd_writer`
     # approach because it doesn't allow us disable parallel file uploading.
     # For these cases we use a separate `write_snowflake` function.
     engine = create_engine(URL(**connection_kwargs))

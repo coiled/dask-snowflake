@@ -100,9 +100,7 @@ def to_snowflake(
 
     """
     if "application" not in connection_kwargs:
-        connection_kwargs["application"] = dask.config.get(
-            "snowflake.partner", "dask"
-        )
+        connection_kwargs["application"] = dask.config.get("snowflake.partner", "dask")
     # Write the DataFrame meta to ensure table exists before
     # trying to write all partitions in parallel. Otherwise
     # we run into race conditions around creating a new table.

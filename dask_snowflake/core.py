@@ -24,11 +24,6 @@ def write_snowflake(
     name: str,
     connection_kwargs: Dict,
 ):
-    # TODO: Remove the `use_new_put_get` logic below once the known PUT issue with
-    # `snowflake-connector-python` is resolved
-    if "use_new_put_get" not in connection_kwargs:
-        connection_kwargs["use_new_put_get"] = False
-
     with snowflake.connector.connect(**connection_kwargs) as conn:
         # NOTE: Use a process-wide lock to avoid a `boto` multithreading issue
         # https://github.com/snowflakedb/snowflake-connector-python/issues/156

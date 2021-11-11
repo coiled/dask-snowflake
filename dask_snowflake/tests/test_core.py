@@ -3,15 +3,21 @@ import uuid
 
 import pandas as pd
 import pytest
+import snowflake.connector
 from snowflake.sqlalchemy import URL
 from sqlalchemy import create_engine
 
+import dask
 import dask.dataframe as dd
-from distributed import Client
+from distributed import Client, Lock
 
 from dask_snowflake import read_snowflake, to_snowflake
 
-client = Client(n_workers=2, threads_per_worker=10)
+
+@pytest.fixture
+def client():
+    with Client(n_workers=2, threads_per_worker=10) as client:
+        yield client
 
 
 @pytest.fixture
@@ -33,15 +39,16 @@ def connection_kwargs():
         database="testdb",
         schema="public",
         warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
+        role=os.environ["SNOWFLAKE_ROLE"],
     )
 
 
-def test_write_read_roundtrip(table, connection_kwargs):
+# TODO: Find out if snowflake supports lower-case column names
+df = pd.DataFrame({"A": range(10), "B": range(10, 20)})
+ddf = dd.from_pandas(df, npartitions=2)
 
-    # TODO: Find out if snowflake supports lower-case column names
-    df = pd.DataFrame({"A": range(10), "B": range(10, 20)})
-    ddf = dd.from_pandas(df, npartitions=2)
 
+def test_write_read_roundtrip(table, connection_kwargs, client):
     to_snowflake(ddf, name=table, connection_kwargs=connection_kwargs)
 
     query = f"SELECT * FROM {table}"
@@ -53,3 +60,103 @@ def test_write_read_roundtrip(table, connection_kwargs):
     dd.utils.assert_eq(
         df, df_out.sort_values(by="A").reset_index(drop=True), check_dtype=False
     )
+
+
+def test_application_id_default(table, connection_kwargs, monkeypatch):
+    # Patch Snowflake's normal connection mechanism with checks that
+    # the expected application ID is set
+    count = 0
+
+    def mock_connect(**kwargs):
+        nonlocal count
+        count += 1
+        assert kwargs["application"] == "dask"
+        return snowflake.connector.Connect(**kwargs)
+
+    monkeypatch.setattr(snowflake.connector, "connect", mock_connect)
+
+    to_snowflake(ddf, name=table, connection_kwargs=connection_kwargs)
+    # One extra connection is made to ensure the DB table exists
+    count_after_write = ddf.npartitions + 1
+    assert count == count_after_write
+
+    ddf_out = read_snowflake(f"SELECT * FROM {table}", connection_kwargs=connection_kwargs)
+    assert count == count_after_write + ddf_out.npartitions
+
+
+def test_application_id_config(table, connection_kwargs, monkeypatch):
+    with dask.config.set({"snowflake.partner": "foo"}):
+        # Patch Snowflake's normal connection mechanism with checks that
+        # the expected application ID is set
+        count = 0
+        def mock_connect(**kwargs):
+            nonlocal count
+            count += 1
+            assert kwargs["application"] == "foo"
+            return snowflake.connector.Connect(**kwargs)
+
+        monkeypatch.setattr(snowflake.connector, "connect", mock_connect)
+
+        to_snowflake(ddf, name=table, connection_kwargs=connection_kwargs)
+        # One extra connection is made to ensure the DB table exists
+        count_after_write = ddf.npartitions + 1
+        assert count == count_after_write
+
+        ddf_out = read_snowflake(f"SELECT * FROM {table}", connection_kwargs=connection_kwargs)
+        assert count == count_after_write + ddf_out.npartitions
+
+
+# def test_application_id_config_on_cluster(table, connection_kwargs, client, monkeypatch):
+
+#     # Ensure client and workers have different `snowflake.partner` values set.
+#     # Later we'll check that the config value on the workers is actually used.
+#     with dask.config.set({"snowflake.partner": "foo"}):
+#         client.run(lambda: dask.config.set({"snowflake.partner": "bar"}))
+#         assert dask.config.get("snowflake.partner") == "foo"
+#         assert all(client.run(lambda: dask.config.get("snowflake.partner") == "bar").values())
+    
+#         # Patch Snowflake's normal connection mechanism with checks that
+#         # the expected application ID is set
+#         def mock_connect(**kwargs):
+#             import dask
+#             with Lock("connect"):
+#                 count = dask.config.get("count", 0)
+#                 dask.config.set({"count": count + 1})
+#             assert kwargs["application"] == "bar"
+#             return snowflake.connector.Connect(**kwargs)
+
+#         monkeypatch.setattr(snowflake.connector, "connect", mock_connect)
+
+#         out = to_snowflake(ddf, name=table, connection_kwargs=connection_kwargs)
+#         # breakpoint()
+#         # One extra connection is made to ensure the DB table exists
+#         count_after_write = ddf.npartitions + 1
+#         assert sum(client.run(lambda: dask.config.get("count")).values()) == count_after_write
+
+#         ddf_out = read_snowflake(f"SELECT * FROM {table}", connection_kwargs=connection_kwargs)
+#         # assert client.get_metadata("connect-count") == count_after_write + ddf_out.npartitions
+
+
+def test_application_id_explicit(table, connection_kwargs, monkeypatch):
+    # Include explicit application ID in input `connection_kwargs`
+    connection_kwargs["application"] = "foo"
+
+    # Patch Snowflake's normal connection mechanism with checks that
+    # the expected application ID is set
+    count = 0
+
+    def mock_connect(**kwargs):
+        nonlocal count
+        count += 1
+        assert kwargs["application"] == "foo"
+        return snowflake.connector.Connect(**kwargs)
+
+    monkeypatch.setattr(snowflake.connector, "connect", mock_connect)
+
+    to_snowflake(ddf, name=table, connection_kwargs=connection_kwargs)
+    # One extra connection is made to ensure the DB table exists
+    count_after_write = ddf.npartitions + 1
+    assert count == count_after_write
+
+    ddf_out = read_snowflake(f"SELECT * FROM {table}", connection_kwargs=connection_kwargs)
+    assert count == count_after_write + ddf_out.npartitions

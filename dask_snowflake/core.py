@@ -24,6 +24,10 @@ def write_snowflake(
     name: str,
     connection_kwargs: Dict,
 ):
+    connection_kwargs = {
+        **{"application": dask.config.get("snowflake.partner", "dask")},
+        **connection_kwargs,
+    }
     with snowflake.connector.connect(**connection_kwargs) as conn:
         # NOTE: Use a process-wide lock to avoid a `boto` multithreading issue
         # https://github.com/snowflakedb/snowflake-connector-python/issues/156
@@ -39,11 +43,16 @@ def write_snowflake(
             )
 
 
+@delayed
 def ensure_db_exists(
     df: pd.DataFrame,
     name: str,
     connection_kwargs,
 ):
+    connection_kwargs = {
+        **{"application": dask.config.get("snowflake.partner", "dask")},
+        **connection_kwargs,
+    }
     # NOTE: we have a separate `ensure_db_exists` function in order to use
     # pandas' `to_sql` which will create a table if the requested one doesn't
     # already exist. However, we don't always want to use Snowflake's `pd_writer`
@@ -51,7 +60,7 @@ def ensure_db_exists(
     # For these cases we use a separate `write_snowflake` function.
     engine = create_engine(URL(**connection_kwargs))
     # # NOTE: pd_writer will automatically uppercase the table name
-    df._meta.to_sql(
+    df.to_sql(
         name=name,
         schema=connection_kwargs.get("schema", None),
         con=engine,
@@ -94,12 +103,13 @@ def to_snowflake(
     ... )
 
     """
-    if "application" not in connection_kwargs:
-        connection_kwargs["application"] = dask.config.get("snowflake.partner", "dask")
     # Write the DataFrame meta to ensure table exists before
     # trying to write all partitions in parallel. Otherwise
     # we run into race conditions around creating a new table.
-    ensure_db_exists(df, name, connection_kwargs)
+    # Also, some clusters will overwrite the `snowflake.partner` configuration value.
+    # We run `ensure_db_exists` on the cluster to ensure we capture the
+    # right partner application ID.
+    ensure_db_exists(df._meta, name, connection_kwargs).compute()
     dask.compute(
         [
             write_snowflake(partition, name, connection_kwargs)
@@ -108,13 +118,16 @@ def to_snowflake(
     )
 
 
-def _fetch_snowflake_batch(chunk: ArrowResultBatch, arrow_options: Dict):
+def _fetch_batch(chunk: ArrowResultBatch, arrow_options: Dict):
     return chunk.to_pandas(**arrow_options)
 
+
 @delayed
-def _fetch_batches(query, connection_kwargs):
-    if "application" not in connection_kwargs:
-        connection_kwargs["application"] = dask.config.get("snowflake.partner", "dask")
+def _fetch_query_batches(query, connection_kwargs):
+    connection_kwargs = {
+        **{"application": dask.config.get("snowflake.partner", "dask")},
+        **connection_kwargs,
+    }
     with snowflake.connector.connect(**connection_kwargs) as conn:
         with conn.cursor() as cur:
             cur.check_can_use_pandas()
@@ -166,7 +179,10 @@ def read_snowflake(
         arrow_options,
     )
 
-    batches = _fetch_batches(query, connection_kwargs).compute()
+    # Some clusters will overwrite the `snowflake.partner` configuration value.
+    # We fetch snowflake batches on the cluster to ensure we capture the
+    # right partner application ID.
+    batches = _fetch_query_batches(query, connection_kwargs).compute()
 
     if arrow_options is None:
         arrow_options = {}
@@ -191,7 +207,7 @@ def read_snowflake(
             meta.columns,
             batches,
             # TODO: Implement wrapper to only convert columns requested
-            partial(_fetch_snowflake_batch, arrow_options=arrow_options),
+            partial(_fetch_batch, arrow_options=arrow_options),
             label=label,
         )
         divisions = tuple([None] * (len(batches) + 1))

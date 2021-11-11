@@ -24,11 +24,6 @@ def write_snowflake(
     name: str,
     connection_kwargs: Dict,
 ):
-    # TODO: Remove the `use_new_put_get` logic below once the known PUT issue with
-    # `snowflake-connector-python` is resolved
-    if "use_new_put_get" not in connection_kwargs:
-        connection_kwargs["use_new_put_get"] = False
-
     with snowflake.connector.connect(**connection_kwargs) as conn:
         # NOTE: Use a process-wide lock to avoid a `boto` multithreading issue
         # https://github.com/snowflakedb/snowflake-connector-python/issues/156
@@ -119,7 +114,6 @@ def _fetch_snowflake_batch(chunk: ArrowResultBatch, arrow_options: Dict):
 @delayed
 def _fetch_batches(query, connection_kwargs):
     if "application" not in connection_kwargs:
-        # TODO: Set partner connect ID / application to dask once public
         connection_kwargs["application"] = dask.config.get("snowflake.partner", "dask")
     with snowflake.connector.connect(**connection_kwargs) as conn:
         with conn.cursor() as cur:
@@ -165,7 +159,6 @@ def read_snowflake(
     ... )
 
     """
-
     label = "read-snowflake-"
     output_name = label + tokenize(
         query,

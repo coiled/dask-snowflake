@@ -116,6 +116,20 @@ def to_snowflake(
 def _fetch_snowflake_batch(chunk: ArrowResultBatch, arrow_options: Dict):
     return chunk.to_pandas(**arrow_options)
 
+@delayed
+def _fetch_batches(query, connection_kwargs):
+    if "application" not in connection_kwargs:
+        # TODO: Set partner connect ID / application to dask once public
+        connection_kwargs["application"] = dask.config.get("snowflake.partner", "dask")
+    with snowflake.connector.connect(**connection_kwargs) as conn:
+        with conn.cursor() as cur:
+            cur.check_can_use_pandas()
+            cur.check_can_use_arrow_resultset()
+            cur.execute(query)
+            batches = cur.get_result_batches()
+
+    return batches
+
 
 def read_snowflake(
     query: str, connection_kwargs: Dict, arrow_options: Optional[Dict] = None
@@ -151,11 +165,6 @@ def read_snowflake(
     ... )
 
     """
-    if "application" not in connection_kwargs:
-        # TODO: Set partner connect ID / application to dask once public
-        connection_kwargs["application"] = dask.config.get(
-            "snowflake.partner", "Coiled_Cloud"
-        )
 
     label = "read-snowflake-"
     output_name = label + tokenize(
@@ -164,12 +173,7 @@ def read_snowflake(
         arrow_options,
     )
 
-    with snowflake.connector.connect(**connection_kwargs) as conn:
-        with conn.cursor() as cur:
-            cur.check_can_use_pandas()
-            cur.check_can_use_arrow_resultset()
-            cur.execute(query)
-            batches = cur.get_result_batches()
+    batches = _fetch_batches(query, connection_kwargs).compute()
 
     if arrow_options is None:
         arrow_options = {}

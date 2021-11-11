@@ -80,7 +80,9 @@ def test_application_id_default(table, connection_kwargs, monkeypatch):
     count_after_write = ddf.npartitions + 1
     assert count == count_after_write
 
-    ddf_out = read_snowflake(f"SELECT * FROM {table}", connection_kwargs=connection_kwargs)
+    ddf_out = read_snowflake(
+        f"SELECT * FROM {table}", connection_kwargs=connection_kwargs
+    )
     assert count == count_after_write + ddf_out.npartitions
 
 
@@ -89,6 +91,7 @@ def test_application_id_config(table, connection_kwargs, monkeypatch):
         # Patch Snowflake's normal connection mechanism with checks that
         # the expected application ID is set
         count = 0
+
         def mock_connect(**kwargs):
             nonlocal count
             count += 1
@@ -102,7 +105,9 @@ def test_application_id_config(table, connection_kwargs, monkeypatch):
         count_after_write = ddf.npartitions + 1
         assert count == count_after_write
 
-        ddf_out = read_snowflake(f"SELECT * FROM {table}", connection_kwargs=connection_kwargs)
+        ddf_out = read_snowflake(
+            f"SELECT * FROM {table}", connection_kwargs=connection_kwargs
+        )
         assert count == count_after_write + ddf_out.npartitions
 
 
@@ -114,7 +119,7 @@ def test_application_id_config(table, connection_kwargs, monkeypatch):
 #         client.run(lambda: dask.config.set({"snowflake.partner": "bar"}))
 #         assert dask.config.get("snowflake.partner") == "foo"
 #         assert all(client.run(lambda: dask.config.get("snowflake.partner") == "bar").values())
-    
+
 #         # Patch Snowflake's normal connection mechanism with checks that
 #         # the expected application ID is set
 #         def mock_connect(**kwargs):
@@ -158,5 +163,7 @@ def test_application_id_explicit(table, connection_kwargs, monkeypatch):
     count_after_write = ddf.npartitions + 1
     assert count == count_after_write
 
-    ddf_out = read_snowflake(f"SELECT * FROM {table}", connection_kwargs=connection_kwargs)
+    ddf_out = read_snowflake(
+        f"SELECT * FROM {table}", connection_kwargs=connection_kwargs
+    )
     assert count == count_after_write + ddf_out.npartitions

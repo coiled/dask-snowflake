@@ -9,7 +9,7 @@ from sqlalchemy import create_engine
 
 import dask
 import dask.dataframe as dd
-from distributed import Client, Lock
+from distributed import Client
 
 from dask_snowflake import read_snowflake, to_snowflake
 

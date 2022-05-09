@@ -3,6 +3,7 @@ from typing import Dict, Optional
 
 import pandas as pd
 import snowflake.connector
+from snowflake.connector.connection import SnowflakeConnection
 from snowflake.connector.pandas_tools import pd_writer, write_pandas
 from snowflake.connector.result_batch import ArrowResultBatch
 from snowflake.sqlalchemy import URL
@@ -41,8 +42,7 @@ def write_snowflake(
                 parallel=1,
                 quote_identifiers=False,
             )
-
-
+         
 @delayed
 def ensure_db_exists(
     df: pd.DataFrame,
@@ -117,29 +117,32 @@ def to_snowflake(
         ]
     )
 
-
 def _fetch_batch(chunk: ArrowResultBatch, arrow_options: Dict):
     return chunk.to_pandas(**arrow_options)
 
 
 @delayed
-def _fetch_query_batches(query, connection_kwargs):
+def _fetch_query_batches(query, connection):
+    with connection.cursor() as cur:
+        cur.check_can_use_pandas()
+        cur.check_can_use_arrow_resultset()
+        cur.execute(query)
+        batches = cur.get_result_batches()
+
+    return batches
+
+def read_snowflake(
+        query: str, connection_kwargs: Dict, arrow_options: Optional[Dict] = None
+) -> dd.DataFrame:
     connection_kwargs = {
         **{"application": dask.config.get("snowflake.partner", "dask")},
         **connection_kwargs,
     }
     with snowflake.connector.connect(**connection_kwargs) as conn:
-        with conn.cursor() as cur:
-            cur.check_can_use_pandas()
-            cur.check_can_use_arrow_resultset()
-            cur.execute(query)
-            batches = cur.get_result_batches()
-
-    return batches
-
-
-def read_snowflake(
-    query: str, connection_kwargs: Dict, arrow_options: Optional[Dict] = None
+        return read_snowflake_with_conn(query, conn, arrow_options)
+    
+def read_snowflake_with_conn(
+        query: str, connection: SnowflakeConnection, arrow_options: Optional[Dict] = None
 ) -> dd.DataFrame:
     """Load a Dask DataFrame based of the result of a Snowflake query.
 
@@ -175,14 +178,14 @@ def read_snowflake(
     label = "read-snowflake-"
     output_name = label + tokenize(
         query,
-        connection_kwargs,
+        #connection_kwargs,
         arrow_options,
     )
 
     # Some clusters will overwrite the `snowflake.partner` configuration value.
     # We fetch snowflake batches on the cluster to ensure we capture the
     # right partner application ID.
-    batches = _fetch_query_batches(query, connection_kwargs).compute()
+    batches = _fetch_query_batches(query, connection).compute()    
 
     if arrow_options is None:
         arrow_options = {}

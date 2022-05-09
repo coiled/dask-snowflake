@@ -30,19 +30,29 @@ def write_snowflake(
         **connection_kwargs,
     }
     with snowflake.connector.connect(**connection_kwargs) as conn:
-        # NOTE: Use a process-wide lock to avoid a `boto` multithreading issue
-        # https://github.com/snowflakedb/snowflake-connector-python/issues/156
-        with SerializableLock(token="write_snowflake"):
-            write_pandas(
-                conn=conn,
-                df=df,
-                schema=connection_kwargs.get("schema", None),
-                # NOTE: since ensure_db_exists uses uppercase for the table name
-                table_name=name.upper(),
-                parallel=1,
-                quote_identifiers=False,
-            )
-         
+        write_snowflake_with_conn(df, name, conn, connection_kwargs.get("schema", None))
+
+
+@delayed
+def write_snowflake_with_conn(
+    df: dd.DataFrame,
+    name: str,
+    connection: SnowflakeConnection,
+    schema: Optional[str] = None,
+):
+    # NOTE: Use a process-wide lock to avoid a `boto` multithreading issue
+    # https://github.com/snowflakedb/snowflake-connector-python/issues/156
+    with SerializableLock(token="write_snowflake"):
+        write_pandas(
+            conn=connection,
+            df=df,
+            schema=schema,
+            # NOTE: since ensure_db_exists uses uppercase for the table name
+            table_name=name.upper(),
+            parallel=1,
+            quote_identifiers=False,
+        )
+            
 @delayed
 def ensure_db_exists(
     df: pd.DataFrame,

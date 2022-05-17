@@ -195,7 +195,7 @@ def read_snowflake_with_conn(
     # Some clusters will overwrite the `snowflake.partner` configuration value.
     # We fetch snowflake batches on the cluster to ensure we capture the
     # right partner application ID.
-    batches = _fetch_query_batches(query, connection).compute()    
+    batches = _fetch_query_batches(query, connection).compute(scheduler='single-threaded')    
 
     if arrow_options is None:
         arrow_options = {}

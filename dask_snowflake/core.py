@@ -193,7 +193,7 @@ def read_snowflake(
             # This should never since the above check_can_use* calls should
             # raise before if arrow is not properly setup
             raise RuntimeError(f"Received unknown result batch type {type(b)}")
-        meta = b.to_pandas()
+        meta = b.to_pandas(**arrow_options)
         break
 
     if not batches:

@@ -12,6 +12,7 @@ import dask.dataframe as dd
 from distributed import Client, Lock, worker_client
 
 from dask_snowflake import read_snowflake, to_snowflake
+from dask_snowflake.core import write_snowflake
 
 
 @pytest.fixture
@@ -63,7 +64,7 @@ def test_write_read_roundtrip(table, connection_kwargs, client):
 
 
 def test_arrow_options(table, connection_kwargs, client):
-    to_snowflake(ddf, name=table, connection_kwargs=connection_kwargs)
+    write_snowflake(df, name=table, connection_kwargs=connection_kwargs).compute()
 
     query = f"SELECT * FROM {table}"
     df_out = read_snowflake(

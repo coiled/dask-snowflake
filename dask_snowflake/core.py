@@ -20,7 +20,7 @@ from dask.utils import SerializableLock
 
 @delayed
 def write_snowflake(
-    df: dd.DataFrame,
+    df: pd.DataFrame,
     name: str,
     connection_kwargs: Dict,
 ):

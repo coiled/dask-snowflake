@@ -63,6 +63,8 @@ def test_write_read_roundtrip(table, connection_kwargs, client):
 
 
 def test_arrow_options(table, connection_kwargs, client):
+    # We use a single partition Dask DataFrame to ensure the
+    # categories used below are always in the same order.
     to_snowflake(ddf.repartition(1), name=table, connection_kwargs=connection_kwargs)
 
     query = f"SELECT * FROM {table}"

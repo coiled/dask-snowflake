@@ -62,6 +62,25 @@ def test_write_read_roundtrip(table, connection_kwargs, client):
     )
 
 
+def test_arrow_options(table, connection_kwargs, client):
+    # We use a single partition Dask DataFrame to ensure the
+    # categories used below are always in the same order.
+    to_snowflake(ddf.repartition(1), name=table, connection_kwargs=connection_kwargs)
+
+    query = f"SELECT * FROM {table}"
+    df_out = read_snowflake(
+        query, connection_kwargs=connection_kwargs, arrow_options={"categories": ["A"]}
+    )
+    # FIXME: Why does read_snowflake return lower-case columns names?
+    df_out.columns = df_out.columns.str.upper()
+    # FIXME: We need to sort the DataFrame because paritions are written
+    # in a non-sequential order.
+    expected = df.astype({"A": "category"})
+    dd.utils.assert_eq(
+        expected, df_out.sort_values(by="A").reset_index(drop=True), check_dtype=False
+    )
+
+
 def test_application_id_default(table, connection_kwargs, monkeypatch):
     # Patch Snowflake's normal connection mechanism with checks that
     # the expected application ID is set

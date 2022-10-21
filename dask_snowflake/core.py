@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import partial
+from typing import Sequence
 
 import pandas as pd
 import snowflake.connector
@@ -144,7 +145,7 @@ def read_snowflake(
     *,
     connection_kwargs: dict,
     arrow_options: dict | None = None,
-    execute_params=None,
+    execute_params: Sequence | dict | None = None,
 ) -> dd.DataFrame:
     """Load a Dask DataFrame based of the result of a Snowflake query.
 
@@ -158,6 +159,9 @@ def read_snowflake(
     arrow_options:
         Optional arguments forwarded to ``arrow.Table.to_pandas`` when
         converting data to a pandas DataFrame.
+    execute_params:
+        Optional query parameters to pass to Snowflake's ``Cursor.execute(...)``
+        method.
 
     Examples
     --------

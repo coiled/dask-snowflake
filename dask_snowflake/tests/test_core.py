@@ -194,3 +194,20 @@ def test_application_id_explicit(table, connection_kwargs, monkeypatch):
         f"SELECT * FROM {table}", connection_kwargs=connection_kwargs
     )
     assert count == count_after_write + ddf_out.npartitions
+
+
+def test_execute_params(table, connection_kwargs, client):
+    to_snowflake(ddf, name=table, connection_kwargs=connection_kwargs)
+
+    df_out = read_snowflake(
+        "SELECT * FROM %(table)s",
+        execute_params={"table": table},
+        connection_kwargs=connection_kwargs,
+    )
+    # FIXME: Why does read_snowflake return lower-case columns names?
+    df_out.columns = df_out.columns.str.upper()
+    # FIXME: We need to sort the DataFrame because paritions are written
+    # in a non-sequential order.
+    dd.utils.assert_eq(
+        df, df_out.sort_values(by="A").reset_index(drop=True), check_dtype=False
+    )

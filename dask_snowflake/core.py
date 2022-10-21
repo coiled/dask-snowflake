@@ -1,5 +1,6 @@
+from __future__ import annotations
+
 from functools import partial
-from typing import Dict, Optional
 
 import pandas as pd
 import snowflake.connector
@@ -22,7 +23,7 @@ from dask.utils import SerializableLock
 def write_snowflake(
     df: pd.DataFrame,
     name: str,
-    connection_kwargs: Dict,
+    connection_kwargs: dict,
 ):
     connection_kwargs = {
         **{"application": dask.config.get("snowflake.partner", "dask")},
@@ -73,7 +74,7 @@ def ensure_db_exists(
 def to_snowflake(
     df: dd.DataFrame,
     name: str,
-    connection_kwargs: Dict,
+    connection_kwargs: dict,
 ):
     """Write a Dask DataFrame to a Snowflake table.
 
@@ -118,12 +119,12 @@ def to_snowflake(
     )
 
 
-def _fetch_batch(chunk: ArrowResultBatch, arrow_options: Dict):
+def _fetch_batch(chunk: ArrowResultBatch, arrow_options: dict):
     return chunk.to_pandas(**arrow_options)
 
 
 @delayed
-def _fetch_query_batches(query, connection_kwargs):
+def _fetch_query_batches(query, connection_kwargs, execute_params):
     connection_kwargs = {
         **{"application": dask.config.get("snowflake.partner", "dask")},
         **connection_kwargs,
@@ -132,14 +133,18 @@ def _fetch_query_batches(query, connection_kwargs):
         with conn.cursor() as cur:
             cur.check_can_use_pandas()
             cur.check_can_use_arrow_resultset()
-            cur.execute(query)
+            cur.execute(query, execute_params)
             batches = cur.get_result_batches()
 
     return batches
 
 
 def read_snowflake(
-    query: str, connection_kwargs: Dict, arrow_options: Optional[Dict] = None
+    query: str,
+    *,
+    connection_kwargs: dict,
+    arrow_options: dict | None = None,
+    execute_params=None,
 ) -> dd.DataFrame:
     """Load a Dask DataFrame based of the result of a Snowflake query.
 
@@ -182,7 +187,7 @@ def read_snowflake(
     # Some clusters will overwrite the `snowflake.partner` configuration value.
     # We fetch snowflake batches on the cluster to ensure we capture the
     # right partner application ID.
-    batches = _fetch_query_batches(query, connection_kwargs).compute()
+    batches = _fetch_query_batches(query, connection_kwargs, execute_params).compute()
 
     if arrow_options is None:
         arrow_options = {}

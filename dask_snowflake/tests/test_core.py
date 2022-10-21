@@ -210,6 +210,7 @@ def test_execute_params(table, connection_kwargs, client):
     # in a non-sequential order.
     dd.utils.assert_eq(
         df[df["A"] == 3],
-        df_out.sort_values(by="A").reset_index(drop=True),
+        df_out,
         check_dtype=False,
+        check_index=False,
     )

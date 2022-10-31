@@ -121,6 +121,7 @@ def to_snowflake(
 
 
 def _fetch_batches(chunks: list[ArrowResultBatch], arrow_options: dict):
+    print(chunks)
     return pd.concat([chunk.to_pandas(**arrow_options) for chunk in chunks], axis=0)
 
 
@@ -146,6 +147,15 @@ def _partition_batches(
     npartitions: None | int = None,
     partition_size: None | str | int = None,
 ) -> list[list[ArrowResultBatch]]:
+    """
+    Given a list of batches and a sample, partition the batches into dask dataframe
+    partitions.
+
+    Batch sizing is seemingly not under our control, and is typically much smaller
+    than the optimal partition size:
+    https://docs.snowflake.com/en/user-guide/python-connector-distributed-fetch.html
+    So instead batch the batches into partitions of approximately the right size.
+    """
 
     if (npartitions is None) is (partition_size is None):
         raise ValueError(
@@ -163,6 +173,8 @@ def _partition_batches(
         )
         approx_row_size = meta.memory_usage().sum() / len(meta)
         target = max(partition_bytes / approx_row_size, 1)
+        print(approx_row_size, target)
+
     else:
         assert False  # unreachable
 
@@ -172,8 +184,8 @@ def _partition_batches(
     for batch in batches:
         if len(curr) > 0 and batch.rowcount + partition_len > target:
             batches_partitioned.append(curr)
-            curr = []
-            partition_len = 0
+            curr = [batch]
+            partition_len = batch.rowcount
         else:
             curr.append(batch)
             partition_len += batch.rowcount
@@ -247,8 +259,10 @@ def read_snowflake(
             # This should never since the above check_can_use* calls should
             # raise before if arrow is not properly setup
             raise RuntimeError(f"Received unknown result batch type {type(b)}")
-        meta = b.to_pandas(**arrow_options)
-        break
+        print(b.rowcount)
+        if b.rowcount > 0:
+            meta = b.to_pandas(**arrow_options)
+            break
 
     if meta is None:
         raise RuntimeError("Unable to infer meta from first non-empty batch")
@@ -261,6 +275,8 @@ def read_snowflake(
         batches_partitioned = _partition_batches(
             batches, meta, npartitions=npartitions, partition_size=partition_size
         )
+        for b in batches:
+            print(b.rowcount)
         print(batches_partitioned)
 
         # Create Blockwise layer
@@ -272,7 +288,7 @@ def read_snowflake(
             partial(_fetch_batches, arrow_options=arrow_options),
             label=label,
         )
-        divisions = tuple([None] * (len(batches) + 1))
+        divisions = tuple([None] * (len(batches_partitioned) + 1))
         graph = HighLevelGraph({output_name: layer}, {output_name: set()})
 
     return new_dd_object(graph, output_name, meta, divisions)

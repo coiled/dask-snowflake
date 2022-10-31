@@ -37,8 +37,8 @@ def connection_kwargs():
         user=os.environ["SNOWFLAKE_USER"],
         password=os.environ["SNOWFLAKE_PASSWORD"],
         account=os.environ["SNOWFLAKE_ACCOUNT"],
-        database="testdb",
-        schema="public",
+        database="TESTDB",
+        schema="TESTSCHEMA",
         warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
         role=os.environ["SNOWFLAKE_ROLE"],
     )
@@ -101,7 +101,7 @@ def test_application_id_default(table, connection_kwargs, monkeypatch):
     assert count == count_after_write
 
     ddf_out = read_snowflake(
-        f"SELECT * FROM {table}", connection_kwargs=connection_kwargs
+        f"SELECT * FROM {table}", connection_kwargs=connection_kwargs, npartitions=2
     )
     assert count == count_after_write + ddf_out.npartitions
 
@@ -126,7 +126,7 @@ def test_application_id_config(table, connection_kwargs, monkeypatch):
         assert count == count_after_write
 
         ddf_out = read_snowflake(
-            f"SELECT * FROM {table}", connection_kwargs=connection_kwargs
+            f"SELECT * FROM {table}", connection_kwargs=connection_kwargs, npartitions=2
         )
         assert count == count_after_write + ddf_out.npartitions
 
@@ -162,7 +162,7 @@ def test_application_id_config_on_cluster(table, connection_kwargs, client):
         count_after_write = ddf.npartitions + 1
 
         ddf_out = read_snowflake(
-            f"SELECT * FROM {table}", connection_kwargs=connection_kwargs
+            f"SELECT * FROM {table}", connection_kwargs=connection_kwargs, npartitions=2
         )
         assert (
             client.get_metadata("connect-count")
@@ -192,7 +192,7 @@ def test_application_id_explicit(table, connection_kwargs, monkeypatch):
     assert count == count_after_write
 
     ddf_out = read_snowflake(
-        f"SELECT * FROM {table}", connection_kwargs=connection_kwargs
+        f"SELECT * FROM {table}", connection_kwargs=connection_kwargs, npartitions=2
     )
     assert count == count_after_write + ddf_out.npartitions
 
@@ -204,6 +204,7 @@ def test_execute_params(table, connection_kwargs, client):
         f"SELECT * FROM {table} where A = %(target)s",
         execute_params={"target": 3},
         connection_kwargs=connection_kwargs,
+        npartitions=2,
     )
     # FIXME: Why does read_snowflake return lower-case columns names?
     df_out.columns = df_out.columns.str.upper()
@@ -217,9 +218,23 @@ def test_execute_params(table, connection_kwargs, client):
     )
 
 
-def test_result_batching(table, connection_kwargs, client):
-    ddf = dask.datasets.timeseries()
-    to_snowflake(ddf, name=table, connection_kwargs=connection_kwargs)
-    ddf_out = read_snowflake(
-        f"SELECT * FROM {table}", connection_kwargs=connection_kwargs
+@pytest.mark.parametrize(
+    "partitioning", [{"partition_size": "2 MiB"}, {"npartitions": 3}]
+)
+def test_result_batching(partitioning, table, connection_kwargs, client):
+    ddf = (
+        dask.datasets.timeseries(freq="10s", seed=1)
+        .reset_index(drop=True)
+        .rename(columns=lambda c: c.upper())
     )
+
+    to_snowflake(ddf, name=table, connection_kwargs=connection_kwargs)
+
+    ddf_out = read_snowflake(
+        f"SELECT * FROM {table}",
+        connection_kwargs=connection_kwargs,
+        **partitioning,
+    )
+
+    assert ddf_out.npartitions < 5 and ddf_out.npartitions > 1
+    dd.utils.assert_eq(ddf, ddf_out, check_dtype=False, check_index=False)

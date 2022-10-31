@@ -140,12 +140,57 @@ def _fetch_query_batches(query, connection_kwargs, execute_params):
     return batches
 
 
+def _partition_batches(
+    batches: list[ArrowResultBatch],
+    meta: pd.DataFrame,
+    npartitions: None | int = None,
+    partition_size: None | str | int = None,
+) -> list[list[ArrowResultBatch]]:
+
+    if (npartitions is None) is (partition_size is None):
+        raise ValueError(
+            "Must provide exactly one of `npartitions` or `partition_size`"
+        )
+
+    if npartitions is not None:
+        assert npartitions >= 1
+        target = sum([b.rowcount for b in batches]) // npartitions
+    elif partition_size is not None:
+        partition_bytes = (
+            parse_bytes(partition_size)
+            if isinstance(partition_size, str)
+            else partition_size
+        )
+        approx_row_size = meta.memory_usage().sum() / len(meta)
+        target = max(partition_bytes / approx_row_size, 1)
+    else:
+        assert False  # unreachable
+
+    batches_partitioned: list[list[ArrowResultBatch]] = []
+    curr: list[ArrowResultBatch] = []
+    partition_len = 0
+    for batch in batches:
+        if len(curr) > 0 and batch.rowcount + partition_len > target:
+            batches_partitioned.append(curr)
+            curr = []
+            partition_len = 0
+        else:
+            curr.append(batch)
+            partition_len += batch.rowcount
+    if curr:
+        batches_partitioned.append(curr)
+
+    return batches_partitioned
+
+
 def read_snowflake(
     query: str,
     *,
     connection_kwargs: dict,
     arrow_options: dict | None = None,
     execute_params: Sequence | dict | None = None,
+    npartitions=None,
+    partition_size=None,
 ) -> dd.DataFrame:
     """Load a Dask DataFrame based of the result of a Snowflake query.
 
@@ -213,24 +258,9 @@ def read_snowflake(
         graph = {(output_name, 0): meta}
         divisions = (None, None)
     else:
-        approx_row_size = meta.memory_usage().sum() / len(meta)
-        partition_size = "10MiB"
-        target = max(parse_bytes(partition_size) / approx_row_size, 1)
-
-        batches_partitioned: list[list[ArrowResultBatch]] = []
-        curr: list[ArrowResultBatch] = []
-        partition_len = 0
-        for batch in batches:
-            if len(curr) > 0 and batch.rowcount + partition_len > target:
-                batches_partitioned.append(curr)
-                curr = []
-                partition_len = 0
-            else:
-                curr.append(batch)
-                partition_len += batch.rowcount
-        if curr:
-            batches_partitioned.append(curr)
-
+        batches_partitioned = _partition_batches(
+            batches, meta, npartitions=npartitions, partition_size=partition_size
+        )
         print(batches_partitioned)
 
         # Create Blockwise layer
@@ -245,8 +275,4 @@ def read_snowflake(
         divisions = tuple([None] * (len(batches) + 1))
         graph = HighLevelGraph({output_name: layer}, {output_name: set()})
 
-        print(f"{batches=}")
-        print(
-            f"{b=}, {b.rowcount=}, {b.compressed_size=}, {b.uncompressed_size=}, {meta.memory_usage(deep=True)}"
-        )
     return new_dd_object(graph, output_name, meta, divisions)

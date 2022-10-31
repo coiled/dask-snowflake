@@ -205,6 +205,9 @@ def read_snowflake(
         meta = b.to_pandas(**arrow_options)
         break
 
+    if not meta:
+        raise RuntimeError("Unable to infer meta from single batch")
+
     if not batches:
         # empty dataframe - just use meta
         graph = {(output_name, 0): meta}
@@ -221,4 +224,9 @@ def read_snowflake(
         )
         divisions = tuple([None] * (len(batches) + 1))
         graph = HighLevelGraph({output_name: layer}, {output_name: set()})
+
+        print(f"{batches=}")
+        print(
+            f"{b=}, {b.rowcount=}, {b.compressed_size=}, {b.uncompressed_size=}, {meta.memory_usage(deep=True)}"
+        )
     return new_dd_object(graph, output_name, meta, divisions)

@@ -9,6 +9,7 @@ from sqlalchemy import create_engine
 
 import dask
 import dask.dataframe as dd
+import dask.datasets
 from distributed import Client, Lock, worker_client
 
 from dask_snowflake import read_snowflake, to_snowflake
@@ -213,4 +214,12 @@ def test_execute_params(table, connection_kwargs, client):
         df_out,
         check_dtype=False,
         check_index=False,
+    )
+
+
+def test_result_batching(table, connection_kwargs, client):
+    ddf = dask.datasets.timeseries()
+    to_snowflake(ddf, name=table, connection_kwargs=connection_kwargs)
+    ddf_out = read_snowflake(
+        f"SELECT * FROM {table}", connection_kwargs=connection_kwargs
     )

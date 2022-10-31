@@ -17,7 +17,7 @@ from dask.dataframe.core import new_dd_object
 from dask.delayed import delayed
 from dask.highlevelgraph import HighLevelGraph
 from dask.layers import DataFrameIOLayer
-from dask.utils import SerializableLock
+from dask.utils import SerializableLock, parse_bytes
 
 
 @delayed
@@ -120,8 +120,8 @@ def to_snowflake(
     )
 
 
-def _fetch_batch(chunk: ArrowResultBatch, arrow_options: dict):
-    return chunk.to_pandas(**arrow_options)
+def _fetch_batches(chunks: list[ArrowResultBatch], arrow_options: dict):
+    return pd.concat([chunk.to_pandas(**arrow_options) for chunk in chunks], axis=0)
 
 
 @delayed
@@ -206,20 +206,40 @@ def read_snowflake(
         break
 
     if meta is None:
-        raise RuntimeError("Unable to infer meta from single batch")
+        raise RuntimeError("Unable to infer meta from first non-empty batch")
 
     if not batches:
         # empty dataframe - just use meta
         graph = {(output_name, 0): meta}
         divisions = (None, None)
     else:
+        approx_row_size = meta.memory_usage().sum() / len(meta)
+        partition_size = "10MiB"
+        target = max(parse_bytes(partition_size) / approx_row_size, 1)
+
+        batches_partitioned: list[list[ArrowResultBatch]] = []
+        curr: list[ArrowResultBatch] = []
+        partition_len = 0
+        for batch in batches:
+            if len(curr) > 0 and batch.rowcount + partition_len > target:
+                batches_partitioned.append(curr)
+                curr = []
+                partition_len = 0
+            else:
+                curr.append(batch)
+                partition_len += batch.rowcount
+        if curr:
+            batches_partitioned.append(curr)
+
+        print(batches_partitioned)
+
         # Create Blockwise layer
         layer = DataFrameIOLayer(
             output_name,
             meta.columns,
-            batches,
+            batches_partitioned,
             # TODO: Implement wrapper to only convert columns requested
-            partial(_fetch_batch, arrow_options=arrow_options),
+            partial(_fetch_batches, arrow_options=arrow_options),
             label=label,
         )
         divisions = tuple([None] * (len(batches) + 1))

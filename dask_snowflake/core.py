@@ -205,7 +205,7 @@ def read_snowflake(
         meta = b.to_pandas(**arrow_options)
         break
 
-    if not meta:
+    if meta is None:
         raise RuntimeError("Unable to infer meta from single batch")
 
     if not batches:

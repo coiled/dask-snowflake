@@ -219,7 +219,9 @@ def test_execute_params(table, connection_kwargs, client):
 
 
 @pytest.mark.parametrize(
-    "partitioning", [{"partition_size": "2 MiB"}, {"npartitions": 3}]
+    "partitioning",
+    [{"partition_size": "2 MiB"}, {"npartitions": 3}],
+    ids=["partition_size", "npartitions"],
 )
 def test_result_batching(partitioning, table, connection_kwargs, client):
     ddf = (
@@ -236,5 +238,7 @@ def test_result_batching(partitioning, table, connection_kwargs, client):
         **partitioning,
     )
 
+    # Relatively loose check since we don't control batch sizes and the
+    # dask-snowflake batching algo is approximate.
     assert ddf_out.npartitions < 5 and ddf_out.npartitions > 1
     dd.utils.assert_eq(ddf, ddf_out, check_dtype=False, check_index=False)

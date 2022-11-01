@@ -121,7 +121,6 @@ def to_snowflake(
 
 
 def _fetch_batches(chunks: list[ArrowResultBatch], arrow_options: dict):
-    print(chunks)
     return pd.concat([chunk.to_pandas(**arrow_options) for chunk in chunks], axis=0)
 
 
@@ -173,7 +172,6 @@ def _partition_batches(
         )
         approx_row_size = meta.memory_usage().sum() / len(meta)
         target = max(partition_bytes / approx_row_size, 1)
-        print(approx_row_size, target)
 
     else:
         assert False  # unreachable
@@ -259,7 +257,6 @@ def read_snowflake(
             # This should never since the above check_can_use* calls should
             # raise before if arrow is not properly setup
             raise RuntimeError(f"Received unknown result batch type {type(b)}")
-        print(b.rowcount)
         if b.rowcount > 0:
             meta = b.to_pandas(**arrow_options)
             break
@@ -275,9 +272,6 @@ def read_snowflake(
         batches_partitioned = _partition_batches(
             batches, meta, npartitions=npartitions, partition_size=partition_size
         )
-        for b in batches:
-            print(b.rowcount)
-        print(batches_partitioned)
 
         # Create Blockwise layer
         layer = DataFrameIOLayer(

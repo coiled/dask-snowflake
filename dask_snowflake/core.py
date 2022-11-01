@@ -217,6 +217,16 @@ def read_snowflake(
     execute_params:
         Optional query parameters to pass to Snowflake's ``Cursor.execute(...)``
         method.
+    npartitions:
+        An integer number of partitions for the target Dask DataFrame. You
+        must provide either this or ``partition_size``. Partitioning is approximate,
+        and your actual number of partitions may vary.
+    partition_size: int or str
+        Approximate size of each partition in the target Dask DataFrame. Either
+        an integer number of bytes, or a string description like "100 MiB".
+        Reasonable values are often around few hundred MiB per partition. You
+        must provide either this or ``npartitions``. Partitioning is approximate,
+        and your actual partition sizes may vary.
 
     Examples
     --------

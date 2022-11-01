@@ -172,7 +172,6 @@ def _partition_batches(
         )
         approx_row_size = meta.memory_usage().sum() / len(meta)
         target = max(partition_bytes / approx_row_size, 1)
-
     else:
         assert False  # unreachable
 
@@ -267,6 +266,11 @@ def read_snowflake(
             # This should never since the above check_can_use* calls should
             # raise before if arrow is not properly setup
             raise RuntimeError(f"Received unknown result batch type {type(b)}")
+        # Read the first non-empty batch to determine meta, which is useful for a
+        # better size estimate when partitioning. We could also allow empty meta
+        # here, which should involve less data transfer to the client, at the
+        # cost of worse size estimates. Batches seem less than 1MiB in practice,
+        # so this is likely okay right now, but could be revisited.
         if b.rowcount > 0:
             meta = b.to_pandas(**arrow_options)
             break

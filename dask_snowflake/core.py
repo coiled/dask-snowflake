@@ -17,7 +17,7 @@ from dask.dataframe.core import new_dd_object
 from dask.delayed import delayed
 from dask.highlevelgraph import HighLevelGraph
 from dask.layers import DataFrameIOLayer
-from dask.utils import SerializableLock
+from dask.utils import SerializableLock, parse_bytes
 
 
 @delayed
@@ -120,8 +120,8 @@ def to_snowflake(
     )
 
 
-def _fetch_batch(chunk: ArrowResultBatch, arrow_options: dict):
-    return chunk.to_pandas(**arrow_options)
+def _fetch_batches(chunks: list[ArrowResultBatch], arrow_options: dict):
+    return pd.concat([chunk.to_pandas(**arrow_options) for chunk in chunks], axis=0)
 
 
 @delayed
@@ -140,12 +140,65 @@ def _fetch_query_batches(query, connection_kwargs, execute_params):
     return batches
 
 
+def _partition_batches(
+    batches: list[ArrowResultBatch],
+    meta: pd.DataFrame,
+    npartitions: None | int = None,
+    partition_size: None | str | int = None,
+) -> list[list[ArrowResultBatch]]:
+    """
+    Given a list of batches and a sample, partition the batches into dask dataframe
+    partitions.
+
+    Batch sizing is seemingly not under our control, and is typically much smaller
+    than the optimal partition size:
+    https://docs.snowflake.com/en/user-guide/python-connector-distributed-fetch.html
+    So instead batch the batches into partitions of approximately the right size.
+    """
+    if (npartitions is None) is (partition_size is None):
+        raise ValueError(
+            "Must provide exactly one of `npartitions` or `partition_size`"
+        )
+
+    if npartitions is not None:
+        assert npartitions >= 1
+        target = sum([b.rowcount for b in batches]) // npartitions
+    elif partition_size is not None:
+        partition_bytes = (
+            parse_bytes(partition_size)
+            if isinstance(partition_size, str)
+            else partition_size
+        )
+        approx_row_size = meta.memory_usage().sum() / len(meta)
+        target = max(partition_bytes / approx_row_size, 1)
+    else:
+        assert False  # unreachable
+
+    batches_partitioned: list[list[ArrowResultBatch]] = []
+    curr: list[ArrowResultBatch] = []
+    partition_len = 0
+    for batch in batches:
+        if len(curr) > 0 and batch.rowcount + partition_len > target:
+            batches_partitioned.append(curr)
+            curr = [batch]
+            partition_len = batch.rowcount
+        else:
+            curr.append(batch)
+            partition_len += batch.rowcount
+    if curr:
+        batches_partitioned.append(curr)
+
+    return batches_partitioned
+
+
 def read_snowflake(
     query: str,
     *,
     connection_kwargs: dict,
     arrow_options: dict | None = None,
     execute_params: Sequence | dict | None = None,
+    partition_size: str | int | None = None,
+    npartitions: int | None = None,
 ) -> dd.DataFrame:
     """Load a Dask DataFrame based of the result of a Snowflake query.
 
@@ -162,6 +215,18 @@ def read_snowflake(
     execute_params:
         Optional query parameters to pass to Snowflake's ``Cursor.execute(...)``
         method.
+    partition_size: int or str
+        Approximate size of each partition in the target Dask DataFrame. Either
+        an integer number of bytes, or a string description like "100 MiB".
+        Reasonable values are often around few hundred MiB per partition. You
+        must provide either this or ``npartitions``, with ``npartitions`` taking
+        precedence. Partitioning is approximate, and your actual partition sizes may
+        vary.
+    npartitions: int
+        An integer number of partitions for the target Dask DataFrame. You
+        must provide either this or ``partition_size``, with ``npartitions`` taking
+        precedence. Partitioning is approximate, and your actual number of partitions
+        may vary.
 
     Examples
     --------
@@ -181,6 +246,10 @@ def read_snowflake(
     ... )
 
     """
+    # Provide a reasonable default, as the raw batches tend to be too small.
+    if partition_size is None and npartitions is None:
+        partition_size = "100MiB"
+
     label = "read-snowflake-"
     output_name = label + tokenize(
         query,
@@ -202,23 +271,37 @@ def read_snowflake(
             # This should never since the above check_can_use* calls should
             # raise before if arrow is not properly setup
             raise RuntimeError(f"Received unknown result batch type {type(b)}")
-        meta = b.to_pandas(**arrow_options)
-        break
+        # Read the first non-empty batch to determine meta, which is useful for a
+        # better size estimate when partitioning. We could also allow empty meta
+        # here, which should involve less data transfer to the client, at the
+        # cost of worse size estimates. Batches seem less than 1MiB in practice,
+        # so this is likely okay right now, but could be revisited.
+        if b.rowcount > 0:
+            meta = b.to_pandas(**arrow_options)
+            break
+
+    if meta is None:
+        raise RuntimeError("Unable to infer meta from first non-empty batch")
 
     if not batches:
         # empty dataframe - just use meta
         graph = {(output_name, 0): meta}
         divisions = (None, None)
     else:
+        batches_partitioned = _partition_batches(
+            batches, meta, npartitions=npartitions, partition_size=partition_size
+        )
+
         # Create Blockwise layer
         layer = DataFrameIOLayer(
             output_name,
             meta.columns,
-            batches,
+            batches_partitioned,
             # TODO: Implement wrapper to only convert columns requested
-            partial(_fetch_batch, arrow_options=arrow_options),
+            partial(_fetch_batches, arrow_options=arrow_options),
             label=label,
         )
-        divisions = tuple([None] * (len(batches) + 1))
+        divisions = tuple([None] * (len(batches_partitioned) + 1))
         graph = HighLevelGraph({output_name: layer}, {output_name: set()})
+
     return new_dd_object(graph, output_name, meta, divisions)

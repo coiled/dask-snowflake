@@ -9,6 +9,8 @@ from sqlalchemy import create_engine
 
 import dask
 import dask.dataframe as dd
+import dask.datasets
+from dask.utils import parse_bytes
 from distributed import Client, Lock, worker_client
 
 from dask_snowflake import read_snowflake, to_snowflake
@@ -52,7 +54,7 @@ def test_write_read_roundtrip(table, connection_kwargs, client):
     to_snowflake(ddf, name=table, connection_kwargs=connection_kwargs)
 
     query = f"SELECT * FROM {table}"
-    df_out = read_snowflake(query, connection_kwargs=connection_kwargs)
+    df_out = read_snowflake(query, connection_kwargs=connection_kwargs, npartitions=2)
     # FIXME: Why does read_snowflake return lower-case columns names?
     df_out.columns = df_out.columns.str.upper()
     # FIXME: We need to sort the DataFrame because paritions are written
@@ -69,7 +71,10 @@ def test_arrow_options(table, connection_kwargs, client):
 
     query = f"SELECT * FROM {table}"
     df_out = read_snowflake(
-        query, connection_kwargs=connection_kwargs, arrow_options={"categories": ["A"]}
+        query,
+        connection_kwargs=connection_kwargs,
+        arrow_options={"categories": ["A"]},
+        npartitions=2,
     )
     # FIXME: Why does read_snowflake return lower-case columns names?
     df_out.columns = df_out.columns.str.upper()
@@ -100,7 +105,7 @@ def test_application_id_default(table, connection_kwargs, monkeypatch):
     assert count == count_after_write
 
     ddf_out = read_snowflake(
-        f"SELECT * FROM {table}", connection_kwargs=connection_kwargs
+        f"SELECT * FROM {table}", connection_kwargs=connection_kwargs, npartitions=2
     )
     assert count == count_after_write + ddf_out.npartitions
 
@@ -125,7 +130,7 @@ def test_application_id_config(table, connection_kwargs, monkeypatch):
         assert count == count_after_write
 
         ddf_out = read_snowflake(
-            f"SELECT * FROM {table}", connection_kwargs=connection_kwargs
+            f"SELECT * FROM {table}", connection_kwargs=connection_kwargs, npartitions=2
         )
         assert count == count_after_write + ddf_out.npartitions
 
@@ -161,7 +166,7 @@ def test_application_id_config_on_cluster(table, connection_kwargs, client):
         count_after_write = ddf.npartitions + 1
 
         ddf_out = read_snowflake(
-            f"SELECT * FROM {table}", connection_kwargs=connection_kwargs
+            f"SELECT * FROM {table}", connection_kwargs=connection_kwargs, npartitions=2
         )
         assert (
             client.get_metadata("connect-count")
@@ -191,7 +196,7 @@ def test_application_id_explicit(table, connection_kwargs, monkeypatch):
     assert count == count_after_write
 
     ddf_out = read_snowflake(
-        f"SELECT * FROM {table}", connection_kwargs=connection_kwargs
+        f"SELECT * FROM {table}", connection_kwargs=connection_kwargs, npartitions=2
     )
     assert count == count_after_write + ddf_out.npartitions
 
@@ -203,6 +208,7 @@ def test_execute_params(table, connection_kwargs, client):
         f"SELECT * FROM {table} where A = %(target)s",
         execute_params={"target": 3},
         connection_kwargs=connection_kwargs,
+        npartitions=2,
     )
     # FIXME: Why does read_snowflake return lower-case columns names?
     df_out.columns = df_out.columns.str.upper()
@@ -214,3 +220,42 @@ def test_execute_params(table, connection_kwargs, client):
         check_dtype=False,
         check_index=False,
     )
+
+
+def test_result_batching(table, connection_kwargs, client):
+    ddf = (
+        dask.datasets.timeseries(freq="10s", seed=1)
+        .reset_index(drop=True)
+        .rename(columns=lambda c: c.upper())
+    )
+
+    to_snowflake(ddf, name=table, connection_kwargs=connection_kwargs)
+
+    # Test partition_size logic
+    ddf_out = read_snowflake(
+        f"SELECT * FROM {table}",
+        connection_kwargs=connection_kwargs,
+        partition_size="2 MiB",
+    )
+
+    partition_sizes = ddf_out.memory_usage_per_partition().compute()
+    assert (partition_sizes < 2 * parse_bytes("2 MiB")).all()
+
+    # Test partition_size logic
+    ddf_out = read_snowflake(
+        f"SELECT * FROM {table}",
+        connection_kwargs=connection_kwargs,
+        npartitions=4,
+    )
+    assert abs(ddf_out.npartitions - 4) <= 2
+
+    # Can't specify both
+    with pytest.raises(ValueError, match="exactly one"):
+        ddf_out = read_snowflake(
+            f"SELECT * FROM {table}",
+            connection_kwargs=connection_kwargs,
+            npartitions=4,
+            partition_size="2 MiB",
+        )
+
+    dd.utils.assert_eq(ddf, ddf_out, check_dtype=False, check_index=False)

@@ -53,7 +53,7 @@ def test_write_read_roundtrip(table, connection_kwargs, client):
     to_snowflake(ddf, name=table, connection_kwargs=connection_kwargs)
 
     query = f"SELECT * FROM {table}"
-    df_out = read_snowflake(query, connection_kwargs=connection_kwargs)
+    df_out = read_snowflake(query, connection_kwargs=connection_kwargs, npartitions=2)
     # FIXME: Why does read_snowflake return lower-case columns names?
     df_out.columns = df_out.columns.str.upper()
     # FIXME: We need to sort the DataFrame because paritions are written
@@ -70,7 +70,10 @@ def test_arrow_options(table, connection_kwargs, client):
 
     query = f"SELECT * FROM {table}"
     df_out = read_snowflake(
-        query, connection_kwargs=connection_kwargs, arrow_options={"categories": ["A"]}
+        query,
+        connection_kwargs=connection_kwargs,
+        arrow_options={"categories": ["A"]},
+        npartitions=2,
     )
     # FIXME: Why does read_snowflake return lower-case columns names?
     df_out.columns = df_out.columns.str.upper()

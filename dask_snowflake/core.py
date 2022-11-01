@@ -155,12 +155,6 @@ def _partition_batches(
     https://docs.snowflake.com/en/user-guide/python-connector-distributed-fetch.html
     So instead batch the batches into partitions of approximately the right size.
     """
-
-    if (npartitions is None) is (partition_size is None):
-        raise ValueError(
-            "Must provide exactly one of `npartitions` or `partition_size`"
-        )
-
     if npartitions is not None:
         assert npartitions >= 1
         target = sum([b.rowcount for b in batches]) // npartitions
@@ -173,7 +167,7 @@ def _partition_batches(
         approx_row_size = meta.memory_usage().sum() / len(meta)
         target = max(partition_bytes / approx_row_size, 1)
     else:
-        assert False  # unreachable
+        raise ValueError("Must provide one of `npartitions` or `partition_size`")
 
     batches_partitioned: list[list[ArrowResultBatch]] = []
     curr: list[ArrowResultBatch] = []
@@ -198,8 +192,8 @@ def read_snowflake(
     connection_kwargs: dict,
     arrow_options: dict | None = None,
     execute_params: Sequence | dict | None = None,
-    npartitions=None,
-    partition_size=None,
+    partition_size: str | int | None = "100MiB",
+    npartitions: int | None = None,
 ) -> dd.DataFrame:
     """Load a Dask DataFrame based of the result of a Snowflake query.
 
@@ -216,16 +210,18 @@ def read_snowflake(
     execute_params:
         Optional query parameters to pass to Snowflake's ``Cursor.execute(...)``
         method.
-    npartitions:
-        An integer number of partitions for the target Dask DataFrame. You
-        must provide either this or ``partition_size``. Partitioning is approximate,
-        and your actual number of partitions may vary.
     partition_size: int or str
         Approximate size of each partition in the target Dask DataFrame. Either
         an integer number of bytes, or a string description like "100 MiB".
         Reasonable values are often around few hundred MiB per partition. You
-        must provide either this or ``npartitions``. Partitioning is approximate,
-        and your actual partition sizes may vary.
+        must provide either this or ``npartitions``, with ``npartitions`` taking
+        precedence. Partitioning is approximate, and your actual partition sizes may
+        vary.
+    npartitions: int
+        An integer number of partitions for the target Dask DataFrame. You
+        must provide either this or ``partition_size``, with ``npartitions`` taking
+        precedence. Partitioning is approximate, and your actual number of partitions
+        may vary.
 
     Examples
     --------

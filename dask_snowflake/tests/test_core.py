@@ -37,8 +37,8 @@ def connection_kwargs():
         user=os.environ["SNOWFLAKE_USER"],
         password=os.environ["SNOWFLAKE_PASSWORD"],
         account=os.environ["SNOWFLAKE_ACCOUNT"],
-        database="testdb",
-        schema="public",
+        database="TESTDB",
+        schema="TESTSCHEMA",
         warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
         role=os.environ["SNOWFLAKE_ROLE"],
     )
@@ -243,5 +243,5 @@ def test_result_batching(partitioning, table, connection_kwargs, client):
 
     # Relatively loose check since we don't control batch sizes and the
     # dask-snowflake batching algo is approximate.
-    assert ddf_out.npartitions < 5 and ddf_out.npartitions > 1
+    assert ddf_out.npartitions < 6 and ddf_out.npartitions > 1
     dd.utils.assert_eq(ddf, ddf_out, check_dtype=False, check_index=False)

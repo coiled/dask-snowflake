@@ -247,7 +247,7 @@ def test_result_batching(table, connection_kwargs, client):
         connection_kwargs=connection_kwargs,
         npartitions=4,
     )
-    assert abs(ddf_out.npartitions - 4) < 2
+    assert abs(ddf_out.npartitions - 4) <= 2
 
     # Can't specify both
     with pytest.raises(ValueError, match="exactly one"):

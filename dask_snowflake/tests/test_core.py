@@ -10,6 +10,7 @@ from sqlalchemy import create_engine
 import dask
 import dask.dataframe as dd
 import dask.datasets
+from dask.utils import parse_bytes
 from distributed import Client, Lock, worker_client
 
 from dask_snowflake import read_snowflake, to_snowflake
@@ -221,12 +222,7 @@ def test_execute_params(table, connection_kwargs, client):
     )
 
 
-@pytest.mark.parametrize(
-    "partitioning",
-    [{"partition_size": "2 MiB"}, {"npartitions": 3}],
-    ids=["partition_size", "npartitions"],
-)
-def test_result_batching(partitioning, table, connection_kwargs, client):
+def test_result_batching(table, connection_kwargs, client):
     ddf = (
         dask.datasets.timeseries(freq="10s", seed=1)
         .reset_index(drop=True)
@@ -235,13 +231,31 @@ def test_result_batching(partitioning, table, connection_kwargs, client):
 
     to_snowflake(ddf, name=table, connection_kwargs=connection_kwargs)
 
+    # Test partition_size logic
     ddf_out = read_snowflake(
         f"SELECT * FROM {table}",
         connection_kwargs=connection_kwargs,
-        **partitioning,
+        partition_size="2 MiB",
     )
 
-    # Relatively loose check since we don't control batch sizes and the
-    # dask-snowflake batching algo is approximate.
-    assert ddf_out.npartitions < 6 and ddf_out.npartitions > 1
+    partition_sizes = ddf_out.memory_usage_per_partition().compute()
+    assert (partition_sizes < 2 * parse_bytes("2 MiB")).all()
+
+    # Test partition_size logic
+    ddf_out = read_snowflake(
+        f"SELECT * FROM {table}",
+        connection_kwargs=connection_kwargs,
+        npartitions=4,
+    )
+    assert abs(ddf_out.npartitions - 4) < 2
+
+    # Can't specify both
+    with pytest.raises(ValueError, match="exactly one"):
+        ddf_out = read_snowflake(
+            f"SELECT * FROM {table}",
+            connection_kwargs=connection_kwargs,
+            npartitions=4,
+            partition_size="2 MiB",
+        )
+
     dd.utils.assert_eq(ddf, ddf_out, check_dtype=False, check_index=False)

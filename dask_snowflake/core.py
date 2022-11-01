@@ -155,6 +155,11 @@ def _partition_batches(
     https://docs.snowflake.com/en/user-guide/python-connector-distributed-fetch.html
     So instead batch the batches into partitions of approximately the right size.
     """
+    if (npartitions is None) is (partition_size is None):
+        raise ValueError(
+            "Must provide exactly one of `npartitions` or `partition_size`"
+        )
+
     if npartitions is not None:
         assert npartitions >= 1
         target = sum([b.rowcount for b in batches]) // npartitions
@@ -167,7 +172,7 @@ def _partition_batches(
         approx_row_size = meta.memory_usage().sum() / len(meta)
         target = max(partition_bytes / approx_row_size, 1)
     else:
-        raise ValueError("Must provide one of `npartitions` or `partition_size`")
+        assert False  # unreachable
 
     batches_partitioned: list[list[ArrowResultBatch]] = []
     curr: list[ArrowResultBatch] = []
@@ -192,7 +197,7 @@ def read_snowflake(
     connection_kwargs: dict,
     arrow_options: dict | None = None,
     execute_params: Sequence | dict | None = None,
-    partition_size: str | int | None = "100MiB",
+    partition_size: str | int | None = None,
     npartitions: int | None = None,
 ) -> dd.DataFrame:
     """Load a Dask DataFrame based of the result of a Snowflake query.
@@ -241,6 +246,10 @@ def read_snowflake(
     ... )
 
     """
+    # Provide a reasonable default, as the raw batches tend to be too small.
+    if partition_size is None and npartitions is None:
+        partition_size = "100MiB"
+
     label = "read-snowflake-"
     output_name = label + tokenize(
         query,

@@ -4,6 +4,7 @@ from functools import partial
 from typing import Sequence
 
 import pandas as pd
+import pyarrow as pa
 import snowflake.connector
 from snowflake.connector.pandas_tools import pd_writer, write_pandas
 from snowflake.connector.result_batch import ArrowResultBatch

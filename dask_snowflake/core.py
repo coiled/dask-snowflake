@@ -249,6 +249,9 @@ def read_snowflake(
     ... )
 
     """
+    if arrow_options is None:
+        arrow_options = {}
+
     # Provide a reasonable default, as the raw batches tend to be too small.
     if partition_size is None and npartitions is None:
         partition_size = "100MiB"
@@ -264,47 +267,40 @@ def read_snowflake(
     # We fetch snowflake batches on the cluster to ensure we capture the
     # right partner application ID.
     batches = _fetch_query_batches(query, connection_kwargs, execute_params).compute()
-
-    if arrow_options is None:
-        arrow_options = {}
-
-    meta = None
-    for b in batches:
-        if not isinstance(b, ArrowResultBatch):
-            # This should never since the above check_can_use* calls should
-            # raise before if arrow is not properly setup
-            raise RuntimeError(f"Received unknown result batch type {type(b)}")
-        # Read the first non-empty batch to determine meta, which is useful for a
-        # better size estimate when partitioning. We could also allow empty meta
-        # here, which should involve less data transfer to the client, at the
-        # cost of worse size estimates. Batches seem less than 1MiB in practice,
-        # so this is likely okay right now, but could be revisited.
-        if b.rowcount > 0:
-            meta = b.to_pandas(**arrow_options)
-            break
-
-    if meta is None:
-        raise RuntimeError("Unable to infer meta from first non-empty batch")
-
     if not batches:
-        # empty dataframe - just use meta
+        # Empty results set -> return an empty DataFrame
+        meta = dd.utils.make_meta({})
         graph = {(output_name, 0): meta}
         divisions = (None, None)
-    else:
-        batches_partitioned = _partition_batches(
-            batches, meta, npartitions=npartitions, partition_size=partition_size
+        return new_dd_object(graph, output_name, meta, divisions)
+
+    batch_types = set(type(b) for b in batches)
+    if len(batch_types) > 1 or next(iter(batch_types)) is not ArrowResultBatch:
+        # See https://github.com/coiled/dask-snowflake/issues/21
+        raise RuntimeError(
+            f"Currently only `ArrowResultBatch` are supported, but received batch types {batch_types}"
         )
 
-        # Create Blockwise layer
-        layer = DataFrameIOLayer(
-            output_name,
-            meta.columns,
-            batches_partitioned,
-            # TODO: Implement wrapper to only convert columns requested
-            partial(_fetch_batches, arrow_options=arrow_options),
-            label=label,
-        )
-        divisions = tuple([None] * (len(batches_partitioned) + 1))
-        graph = HighLevelGraph({output_name: layer}, {output_name: set()})
+    # Read the first non-empty batch to determine meta, which is useful for a
+    # better size estimate when partitioning. We could also allow empty meta
+    # here, which should involve less data transfer to the client, at the
+    # cost of worse size estimates. Batches seem less than 1MiB in practice,
+    # so this is likely okay right now, but could be revisited.
+    meta = batches[0].to_pandas(**arrow_options)
 
+    batches_partitioned = _partition_batches(
+        batches, meta, npartitions=npartitions, partition_size=partition_size
+    )
+
+    # Create Blockwise layer
+    layer = DataFrameIOLayer(
+        output_name,
+        meta.columns,
+        batches_partitioned,
+        # TODO: Implement wrapper to only convert columns requested
+        partial(_fetch_batches, arrow_options=arrow_options),
+        label=label,
+    )
+    divisions = tuple([None] * (len(batches_partitioned) + 1))
+    graph = HighLevelGraph({output_name: layer}, {output_name: set()})
     return new_dd_object(graph, output_name, meta, divisions)

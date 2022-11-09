@@ -64,6 +64,21 @@ def test_write_read_roundtrip(table, connection_kwargs, client):
     )
 
 
+def test_read_empty_result(table, connection_kwargs, client):
+    # A query that yields in an empty results set should return an empty DataFrame
+    to_snowflake(ddf, name=table, connection_kwargs=connection_kwargs)
+
+    result = read_snowflake(
+        f"SELECT * FROM {table} where A > %(target)s",
+        execute_params={"target": df.A.max()},
+        connection_kwargs=connection_kwargs,
+        npartitions=2,
+    )
+    assert type(result) is dd.DataFrame
+    assert len(result.index) == 0
+    assert len(result.columns) == 0
+
+
 def test_arrow_options(table, connection_kwargs, client):
     # We use a single partition Dask DataFrame to ensure the
     # categories used below are always in the same order.

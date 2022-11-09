@@ -64,6 +64,21 @@ def test_write_read_roundtrip(table, connection_kwargs, client):
     )
 
 
+def test_read_empty_result(table, connection_kwargs, client):
+    to_snowflake(ddf, name=table, connection_kwargs=connection_kwargs)
+
+    result = read_snowflake(
+        f"SELECT * FROM {table} where A > %(target)s",
+        execute_params={"target": df.A.max()},
+        connection_kwargs=connection_kwargs,
+        npartitions=2,
+    )
+    # FIXME: Why does read_snowflake return lower-case columns names?
+    result.columns = result.columns.str.upper()
+    expected = df.loc[df.A > df.A.max()]
+    dd.utils.assert_eq(expected, result)
+
+
 def test_arrow_options(table, connection_kwargs, client):
     # We use a single partition Dask DataFrame to ensure the
     # categories used below are always in the same order.

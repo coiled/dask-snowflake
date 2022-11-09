@@ -58,6 +58,41 @@ for parallel IO from Snowflake with Dask.
 
 See their docstrings for further API information.
 
+## Running Tests Locally
+
+If you have a Snowflake accout and access to a database, you can create an environment file in the source tree to run the tests.
+This file will be ignored by git, reducing the risk of accidentally commiting it.
+
+### Example `.env` file
+
+```env
+SNOWFLAKE_USER="<test user name>"
+SNOWFLAKE_PASSWORD="<test_user_password>"
+SNOWFLAKE_ACCOUNT="<account>.<region>.aws"
+SNOWFLAKE_WAREHOUSE="<test warehouse>"
+SNOWFLAKE_ROLE="<test role>"
+SNOWFLAKE_DATABASE="<test database>"
+SNOWFLAKE_SCHEMA="<test schema>"
+```
+
+After creating `snowflake.env`, install the `pytest-dotenv` module
+
+```shell
+conda install pytest-dotenv
+# or
+pip install pytest-dotenv
+```
+
+If you run the tests and get an MemoryError mentioning "write+execute memory for ffi.callback()", you probably have stale build of `cffi` from conda-forge.
+Remove it and install the version from pip:
+
+```shell
+conda remove cffi --force
+pip install cffi
+```
+
+After that you should be able to execute `pytest` and the tests should pass.
+
 ## License
 
 [BSD-3](LICENSE)

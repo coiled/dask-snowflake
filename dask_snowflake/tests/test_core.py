@@ -65,6 +65,7 @@ def test_write_read_roundtrip(table, connection_kwargs, client):
 
 
 def test_read_empty_result(table, connection_kwargs, client):
+    # A query that yields in an empty results set should return an empty DataFrame
     to_snowflake(ddf, name=table, connection_kwargs=connection_kwargs)
 
     result = read_snowflake(
@@ -73,10 +74,9 @@ def test_read_empty_result(table, connection_kwargs, client):
         connection_kwargs=connection_kwargs,
         npartitions=2,
     )
-    # FIXME: Why does read_snowflake return lower-case columns names?
-    result.columns = result.columns.str.upper()
-    expected = df.loc[df.A > df.A.max()]
-    dd.utils.assert_eq(expected, result)
+    assert type(result) == dd.DataFrame
+    assert len(result.index) == 0
+    assert len(result.columns) == 0
 
 
 def test_arrow_options(table, connection_kwargs, client):

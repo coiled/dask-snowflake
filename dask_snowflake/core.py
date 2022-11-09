@@ -269,9 +269,10 @@ def read_snowflake(
     batches = _fetch_query_batches(query, connection_kwargs, execute_params).compute()
     if not batches:
         # Empty results set -> return an empty DataFrame
-        graph = {(output_name, 0): None}
+        meta = dd.utils.make_meta({})
+        graph = {(output_name, 0): meta}
         divisions = (None, None)
-        return new_dd_object(graph, output_name, None, divisions)
+        return new_dd_object(graph, output_name, meta, divisions)
 
     meta = None
     for b in batches:

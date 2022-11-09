@@ -249,6 +249,9 @@ def read_snowflake(
     ... )
 
     """
+    if arrow_options is None:
+        arrow_options = {}
+
     # Provide a reasonable default, as the raw batches tend to be too small.
     if partition_size is None and npartitions is None:
         partition_size = "100MiB"
@@ -264,9 +267,11 @@ def read_snowflake(
     # We fetch snowflake batches on the cluster to ensure we capture the
     # right partner application ID.
     batches = _fetch_query_batches(query, connection_kwargs, execute_params).compute()
-
-    if arrow_options is None:
-        arrow_options = {}
+    if not batches:
+        # Empty results set -> return an empty DataFrame
+        graph = {(output_name, 0): None}
+        divisions = (None, None)
+        return new_dd_object(graph, output_name, None, divisions)
 
     meta = None
     for b in batches:
@@ -286,25 +291,19 @@ def read_snowflake(
     if meta is None:
         raise RuntimeError("Unable to infer meta from first non-empty batch")
 
-    if not batches:
-        # empty dataframe - just use meta
-        graph = {(output_name, 0): meta}
-        divisions = (None, None)
-    else:
-        batches_partitioned = _partition_batches(
-            batches, meta, npartitions=npartitions, partition_size=partition_size
-        )
+    batches_partitioned = _partition_batches(
+        batches, meta, npartitions=npartitions, partition_size=partition_size
+    )
 
-        # Create Blockwise layer
-        layer = DataFrameIOLayer(
-            output_name,
-            meta.columns,
-            batches_partitioned,
-            # TODO: Implement wrapper to only convert columns requested
-            partial(_fetch_batches, arrow_options=arrow_options),
-            label=label,
-        )
-        divisions = tuple([None] * (len(batches_partitioned) + 1))
-        graph = HighLevelGraph({output_name: layer}, {output_name: set()})
-
+    # Create Blockwise layer
+    layer = DataFrameIOLayer(
+        output_name,
+        meta.columns,
+        batches_partitioned,
+        # TODO: Implement wrapper to only convert columns requested
+        partial(_fetch_batches, arrow_options=arrow_options),
+        label=label,
+    )
+    divisions = tuple([None] * (len(batches_partitioned) + 1))
+    graph = HighLevelGraph({output_name: layer}, {output_name: set()})
     return new_dd_object(graph, output_name, meta, divisions)

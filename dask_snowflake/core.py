@@ -122,7 +122,9 @@ def to_snowflake(
 
 
 def _fetch_batches(chunks: list[ArrowResultBatch], arrow_options: dict):
-    return pa.concat_tables(chunks).to_pandas(**arrow_options)
+    return pa.concat_tables([chunk.to_arrow() for chunk in chunks]).to_pandas(
+        **arrow_options
+    )
 
 
 @delayed

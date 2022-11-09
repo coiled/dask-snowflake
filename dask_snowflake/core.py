@@ -4,6 +4,7 @@ from functools import partial
 from typing import Sequence
 
 import pandas as pd
+import pyarrow as pa
 import snowflake.connector
 from snowflake.connector.pandas_tools import pd_writer, write_pandas
 from snowflake.connector.result_batch import ArrowResultBatch
@@ -121,7 +122,9 @@ def to_snowflake(
 
 
 def _fetch_batches(chunks: list[ArrowResultBatch], arrow_options: dict):
-    return pd.concat([chunk.to_pandas(**arrow_options) for chunk in chunks], axis=0)
+    return pa.concat_tables([chunk.to_arrow() for chunk in chunks]).to_pandas(
+        **arrow_options
+    )
 
 
 @delayed
@@ -137,7 +140,7 @@ def _fetch_query_batches(query, connection_kwargs, execute_params):
             cur.execute(query, execute_params)
             batches = cur.get_result_batches()
 
-    return batches
+    return [b for b in batches if b.rowcount > 0]
 
 
 def _partition_batches(

@@ -276,6 +276,7 @@ def read_snowflake(
 
     batch_types = set(type(b) for b in batches)
     if len(batch_types) > 1 or next(iter(batch_types)) is not ArrowResultBatch:
+        # See https://github.com/coiled/dask-snowflake/issues/21
         raise RuntimeError(
             f"Currently only `ArrowResultBatch` are supported, but received batch types {batch_types}"
         )

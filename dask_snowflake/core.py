@@ -122,7 +122,7 @@ def to_snowflake(
 
 
 def _fetch_batches(chunks: list[ArrowResultBatch], arrow_options: dict):
-    arrow_chunks = [_ac for chunk in chunks if (_ac := chunk.to_arrow()).num_rows > 0]
+    arrow_chunks = filter(lambda ac: ac.num_rows > 0, [c.to_arrow() for c in chunks])
     return pa.concat_tables(arrow_chunks).to_pandas(**arrow_options)
 
 

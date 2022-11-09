@@ -122,8 +122,7 @@ def to_snowflake(
 
 
 def _fetch_batches(chunks: list[ArrowResultBatch], arrow_options: dict):
-    arrow_chunks = filter(lambda ac: ac.num_rows > 0, [c.to_arrow() for c in chunks])
-    return pa.concat_tables(arrow_chunks).to_pandas(**arrow_options)
+    return pa.concat_tables(chunks).to_pandas(**arrow_options)
 
 
 @delayed
@@ -139,7 +138,7 @@ def _fetch_query_batches(query, connection_kwargs, execute_params):
             cur.execute(query, execute_params)
             batches = cur.get_result_batches()
 
-    return batches
+    return [b for b in batches if b.rowcount > 0]
 
 
 def _partition_batches(

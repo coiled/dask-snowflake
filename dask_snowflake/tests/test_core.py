@@ -74,7 +74,7 @@ def test_read_empty_result(table, connection_kwargs, client):
         connection_kwargs=connection_kwargs,
         npartitions=2,
     )
-    assert type(result) == dd.DataFrame
+    assert type(result) is dd.DataFrame
     assert len(result.index) == 0
     assert len(result.columns) == 0
 

@@ -38,8 +38,8 @@ def connection_kwargs():
         user=os.environ["SNOWFLAKE_USER"],
         password=os.environ["SNOWFLAKE_PASSWORD"],
         account=os.environ["SNOWFLAKE_ACCOUNT"],
-        database="testdb",
-        schema="public",
+        database=os.environ.get("SNOWFLAKE_DATABASE", "testdb"),
+        schema=os.environ.get("SNOWFLAKE_SCHEMA", "public"),
         warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
         role=os.environ["SNOWFLAKE_ROLE"],
     )

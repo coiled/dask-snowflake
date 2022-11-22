@@ -58,6 +58,43 @@ for parallel IO from Snowflake with Dask.
 
 See their docstrings for further API information.
 
+## Tests
+
+Running tests requires a Snowflake account and access to a database.
+The test suite will automatically look for specific `SNOWFLAKE_*`
+environment variables (listed below) that must be set.
+
+It's recommended (though not required) to store these environment variables
+in a local `.env` file in the root of the `dask-snowflake` repository.
+This file will be automatically ignored by `git`, reducing the risk of accidentally
+commiting it.
+
+Here's what an example `.env` file looks like:
+
+```env
+SNOWFLAKE_USER="<test user name>"
+SNOWFLAKE_PASSWORD="<test_user_password>"
+SNOWFLAKE_ACCOUNT="<account>.<region>.aws"
+SNOWFLAKE_WAREHOUSE="<test warehouse>"
+SNOWFLAKE_ROLE="<test role>"
+SNOWFLAKE_DATABASE="<test database>"
+SNOWFLAKE_SCHEMA="<test schema>"
+```
+
+You may then `source .env` or install [`pytest-dotenv`](https://github.com/quiqua/pytest-dotenv)
+to automatically set these environment variables.
+
+> **_Note:_**
+> If you run the tests and get an `MemoryError` mentioning
+> "write+execute memory for ffi.callback()", you probably have stale
+> build of `cffi` from conda-forge. Remove it and install the version
+> using `pip`:
+>
+> ```shell
+> conda remove cffi --force
+> pip install cffi
+> ```
+
 ## License
 
 [BSD-3](LICENSE)

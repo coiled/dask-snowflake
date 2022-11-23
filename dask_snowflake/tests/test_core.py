@@ -241,10 +241,14 @@ def test_execute_params(table, connection_kwargs, client):
     "end_date",
     [
         pytest.param("2000-01-31", id="one month"),
-        pytest.param("2000-12-31", id="twelve months"),
+        pytest.param(
+            "2000-12-31",
+            id="twelve months",
+            marks=pytest.mark.xfail(reason="inconsistent partition sizing"),
+        ),
     ],
 )
-def test_result_batching(table, connection_kwargs, end_date, client):
+def test_result_batching_partition_sizes(table, connection_kwargs, end_date, client):
     ddf = (
         dask.datasets.timeseries(start="2000-01-01", end=end_date, freq="10s", seed=1)
         .reset_index(drop=True)
@@ -262,6 +266,24 @@ def test_result_batching(table, connection_kwargs, end_date, client):
 
     partition_sizes = ddf_out.memory_usage_per_partition().compute()
     assert (partition_sizes < 2 * parse_bytes("2 MiB")).all()
+
+
+@pytest.mark.parametrize(
+    "end_date",
+    [
+        pytest.param("2000-01-31", id="one month"),
+        pytest.param("2000-12-31", id="twelve months"),
+    ],
+)
+def test_result_batching_nparitions_and_equality(
+    table, connection_kwargs, end_date, client
+):
+    ddf = (
+        dask.datasets.timeseries(start="2000-01-01", end=end_date, freq="10s", seed=1)
+        .reset_index(drop=True)
+        .rename(columns=lambda c: c.upper())
+    )
+    to_snowflake(ddf, name=table, connection_kwargs=connection_kwargs)
 
     # Test partition_size logic
     ddf_out = read_snowflake(

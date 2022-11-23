@@ -237,9 +237,16 @@ def test_execute_params(table, connection_kwargs, client):
     )
 
 
-def test_result_batching(table, connection_kwargs, client):
+@pytest.mark.parametrize(
+    "end_date",
+    [
+        pytest.param("2000-01-31", id="one month"),
+        pytest.param("2000-12-31", id="twelve months"),
+    ],
+)
+def test_result_batching(table, connection_kwargs, end_date, client):
     ddf = (
-        dask.datasets.timeseries(freq="10s", seed=1)
+        dask.datasets.timeseries(start="2000-01-01", end=end_date, freq="10s", seed=1)
         .reset_index(drop=True)
         .rename(columns=lambda c: c.upper())
     )

@@ -12,13 +12,13 @@ it out!
 
 `dask-snowflake` can be installed with `pip`:
 
-```
+```shell
 pip install dask-snowflake
 ```
 
 or with `conda`:
 
-```
+```shell
 conda install -c conda-forge dask-snowflake
 ```
 

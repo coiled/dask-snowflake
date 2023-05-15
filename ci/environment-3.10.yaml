@@ -1,0 +1,14 @@
+name: test-environment
+channels:
+  - conda-forge
+dependencies:
+  # Required
+  - python=3.10
+  - dask
+  - distributed
+  - pandas
+  - pyarrow<11
+  - snowflake-connector-python >=2.6.0
+  - snowflake-sqlalchemy
+  # Testing
+  - pytest

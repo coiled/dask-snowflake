@@ -98,7 +98,7 @@ def test_to_snowflake_compute_false(table, connection_kwargs, client):
     # FIXME: We need to sort the DataFrame because paritions are written
     # in a non-sequential order.
     dd.utils.assert_eq(
-        ddf, ddf2.sort_values(by="A").reset_index(drop=True), check_dtype=False
+        df, ddf2.sort_values(by="A").reset_index(drop=True), check_dtype=False
     )
 
 

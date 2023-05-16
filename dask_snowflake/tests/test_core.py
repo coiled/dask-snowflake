@@ -79,6 +79,29 @@ def test_read_empty_result(table, connection_kwargs, client):
     assert len(result.columns) == 0
 
 
+def test_to_snowflake_compute_false(table, connection_kwargs, client):
+    result = to_snowflake(
+        ddf, name=table, connection_kwargs=connection_kwargs, compute=False
+    )
+    assert isinstance(result, list)
+    assert len(result) == ddf.npartitions
+
+    dask.compute(result)
+
+    ddf2 = read_snowflake(
+        f"SELECT * FROM {table}",
+        connection_kwargs=connection_kwargs,
+        npartitions=2,
+    )
+    # FIXME: Why does read_snowflake return lower-case columns names?
+    ddf2.columns = ddf2.columns.str.upper()
+    # FIXME: We need to sort the DataFrame because paritions are written
+    # in a non-sequential order.
+    dd.utils.assert_eq(
+        ddf, ddf2.sort_values(by="A").reset_index(drop=True), check_dtype=False
+    )
+
+
 def test_arrow_options(table, connection_kwargs, client):
     # We use a single partition Dask DataFrame to ensure the
     # categories used below are always in the same order.

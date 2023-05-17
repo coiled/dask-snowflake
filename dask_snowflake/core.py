@@ -32,8 +32,6 @@ def write_snowflake(
         **connection_kwargs,
     }
     with snowflake.connector.connect(**connection_kwargs) as conn:
-        # NOTE: Use a process-wide lock to avoid a `boto` multithreading issue
-        # https://github.com/snowflakedb/snowflake-connector-python/issues/156
         write_pandas(
             conn=conn,
             df=df,

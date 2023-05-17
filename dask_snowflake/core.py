@@ -40,7 +40,6 @@ def write_snowflake(
             schema=connection_kwargs.get("schema", None),
             # NOTE: since ensure_db_exists uses uppercase for the table name
             table_name=name.upper(),
-            parallel=1,
             quote_identifiers=False,
         )
 

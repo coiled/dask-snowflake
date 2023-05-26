@@ -73,6 +73,7 @@ def to_snowflake(
     df: dd.DataFrame,
     name: str,
     connection_kwargs: dict,
+    compute: bool = True,
 ):
     """Write a Dask DataFrame to a Snowflake table.
 
@@ -85,6 +86,10 @@ def to_snowflake(
     connection_kwargs:
         Connection arguments used when connecting to Snowflake with
         ``snowflake.connector.connect``.
+    compute:
+        Whether or not to compute immediately. If ``True``, write DataFrame
+        partitions to Snowflake immediately. If ``False``, return a list of
+        delayed objects that can be computed later. Defaults to ``True``.
 
     Examples
     --------
@@ -109,12 +114,14 @@ def to_snowflake(
     # We run `ensure_db_exists` on the cluster to ensure we capture the
     # right partner application ID.
     ensure_db_exists(df._meta, name, connection_kwargs).compute()
-    dask.compute(
-        [
-            write_snowflake(partition, name, connection_kwargs)
-            for partition in df.to_delayed()
-        ]
-    )
+    parts = [
+        write_snowflake(partition, name, connection_kwargs)
+        for partition in df.to_delayed()
+    ]
+    if compute:
+        dask.compute(parts)
+    else:
+        return parts
 
 
 def _fetch_batches(chunks: list[ArrowResultBatch], arrow_options: dict):

@@ -18,7 +18,7 @@ from dask.dataframe.core import new_dd_object
 from dask.delayed import delayed
 from dask.highlevelgraph import HighLevelGraph
 from dask.layers import DataFrameIOLayer
-from dask.utils import SerializableLock, parse_bytes
+from dask.utils import parse_bytes
 
 
 @delayed
@@ -32,18 +32,14 @@ def write_snowflake(
         **connection_kwargs,
     }
     with snowflake.connector.connect(**connection_kwargs) as conn:
-        # NOTE: Use a process-wide lock to avoid a `boto` multithreading issue
-        # https://github.com/snowflakedb/snowflake-connector-python/issues/156
-        with SerializableLock(token="write_snowflake"):
-            write_pandas(
-                conn=conn,
-                df=df,
-                schema=connection_kwargs.get("schema", None),
-                # NOTE: since ensure_db_exists uses uppercase for the table name
-                table_name=name.upper(),
-                parallel=1,
-                quote_identifiers=False,
-            )
+        write_pandas(
+            conn=conn,
+            df=df,
+            schema=connection_kwargs.get("schema", None),
+            # NOTE: since ensure_db_exists uses uppercase for the table name
+            table_name=name.upper(),
+            quote_identifiers=False,
+        )
 
 
 @delayed

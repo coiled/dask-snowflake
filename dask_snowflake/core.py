@@ -266,6 +266,17 @@ def read_snowflake(
         arrow_options,
     )
 
+    # Disable `log_imported_packages_in_telemetry` as a temporary workaround for
+    # https://github.com/snowflakedb/snowflake-connector-python/issues/1648.
+    # Also xref https://github.com/coiled/dask-snowflake/issues/51.
+    if connection_kwargs.get("log_imported_packages_in_telemetry"):
+        raise ValueError(
+            "Using `log_imported_packages_in_telemetry=True` when creating a "
+            "Snowflake connection is not currently supported."
+        )
+    else:
+        connection_kwargs["log_imported_packages_in_telemetry"] = False
+
     # Some clusters will overwrite the `snowflake.partner` configuration value.
     # We fetch snowflake batches on the cluster to ensure we capture the
     # right partner application ID.

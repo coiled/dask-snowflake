@@ -4,7 +4,8 @@ from setuptools import setup
 
 setup(
     name="dask-snowflake",
-    version="0.2.0",
+    use_scm_version=True,
+    setup_requires=["setuptools_scm"],
     description="Dask + Snowflake intergration",
     license="BSD",
     maintainer="James Bourbeau",

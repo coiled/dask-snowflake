@@ -2,3 +2,8 @@ dask>=2021.05.0
 distributed
 snowflake-connector-python[pandas]>=2.6.0
 snowflake-sqlalchemy
+# `pandas=2.2` dropped support for `sqlalchemy<2`, but `snowflake-sqlalchemy`
+# doesn't support `sqlalchemy<2` yet. Temporarily pinning `pandas<2.2` for now.
+# xref https://github.com/pandas-dev/pandas/issues/57049
+# xref https://github.com/snowflakedb/snowflake-sqlalch
+pandas<2.2

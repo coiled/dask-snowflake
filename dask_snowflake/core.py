@@ -26,7 +26,7 @@ def write_snowflake(
     df: pd.DataFrame,
     name: str,
     connection_kwargs: dict,
-    write_pandas_kwargs: dict
+    write_pandas_kwargs: dict = {}
 ):
     connection_kwargs = {
         **{"application": dask.config.get("snowflake.partner", "dask")},
@@ -75,7 +75,7 @@ def to_snowflake(
     df: dd.DataFrame,
     name: str,
     connection_kwargs: dict,
-    write_pandas_kwargs: dict,
+    write_pandas_kwargs: dict = {},
     compute: bool = True,
 ):
     """Write a Dask DataFrame to a Snowflake table.

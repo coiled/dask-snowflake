@@ -93,7 +93,8 @@ def to_snowflake(
         Whether or not to compute immediately. If ``True``, write DataFrame
         partitions to Snowflake immediately. If ``False``, return a list of
         delayed objects that can be computed later. Defaults to ``True``.
-
+    write_pandas_kwargs:
+        Additional keyword arguments that will be passed to ``snowflake.connector.pandas_tools.write_pandas``.
     Examples
     --------
 

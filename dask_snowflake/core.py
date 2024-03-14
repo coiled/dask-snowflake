@@ -26,7 +26,7 @@ def write_snowflake(
     df: pd.DataFrame,
     name: str,
     connection_kwargs: dict,
-    on_error: str
+    write_pandas_kwargs: dict
 ):
     connection_kwargs = {
         **{"application": dask.config.get("snowflake.partner", "dask")},
@@ -40,6 +40,7 @@ def write_snowflake(
             # NOTE: since ensure_db_exists uses uppercase for the table name
             table_name=name.upper(),
             quote_identifiers=False,
+            **write_pandas_kwargs
         )
 
 
@@ -74,8 +75,8 @@ def to_snowflake(
     df: dd.DataFrame,
     name: str,
     connection_kwargs: dict,
+    write_pandas_kwargs: dict,
     compute: bool = True,
-    on_error="abort_statement" # this is the default value for the snowflake connector: https://docs.snowflake.com/ko/developer-guide/snowpark/reference/python/api/snowflake.snowpark.Session.write_pandas.html
 ):
     """Write a Dask DataFrame to a Snowflake table.
 
@@ -117,7 +118,7 @@ def to_snowflake(
     # right partner application ID.
     ensure_db_exists(df._meta, name, connection_kwargs).compute()
     parts = [
-        write_snowflake(partition, name, connection_kwargs, on_error=on_error)
+        write_snowflake(partition, name, connection_kwargs, write_pandas_kwargs)
         for partition in df.to_delayed()
     ]
     if compute:

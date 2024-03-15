@@ -10,7 +10,7 @@ from sqlalchemy import create_engine
 import dask
 import dask.dataframe as dd
 import dask.datasets
-from dask.utils import parse_bytes
+from dask.utils import is_dataframe_like, parse_bytes
 from distributed import Client, Lock, worker_client
 
 from dask_snowflake import read_snowflake, to_snowflake
@@ -74,7 +74,7 @@ def test_read_empty_result(table, connection_kwargs, client):
         connection_kwargs=connection_kwargs,
         npartitions=2,
     )
-    assert type(result) is dd.DataFrame
+    assert is_dataframe_like(result)
     assert len(result.index) == 0
     assert len(result.columns) == 0
 

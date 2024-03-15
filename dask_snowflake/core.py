@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from functools import partial
-from typing import Sequence
+from typing import Optional, Sequence
 
 import pandas as pd
 import pyarrow as pa
@@ -26,6 +26,7 @@ def write_snowflake(
     df: pd.DataFrame,
     name: str,
     connection_kwargs: dict,
+    write_pandas_kwargs: Optional[dict] = None,
 ):
     connection_kwargs = {
         **{"application": dask.config.get("snowflake.partner", "dask")},
@@ -39,6 +40,7 @@ def write_snowflake(
             # NOTE: since ensure_db_exists uses uppercase for the table name
             table_name=name.upper(),
             quote_identifiers=False,
+            **(write_pandas_kwargs or {}),
         )
 
 
@@ -73,6 +75,7 @@ def to_snowflake(
     df: dd.DataFrame,
     name: str,
     connection_kwargs: dict,
+    write_pandas_kwargs: Optional[dict] = None,
     compute: bool = True,
 ):
     """Write a Dask DataFrame to a Snowflake table.
@@ -90,7 +93,8 @@ def to_snowflake(
         Whether or not to compute immediately. If ``True``, write DataFrame
         partitions to Snowflake immediately. If ``False``, return a list of
         delayed objects that can be computed later. Defaults to ``True``.
-
+    write_pandas_kwargs:
+        Additional keyword arguments that will be passed to ``snowflake.connector.pandas_tools.write_pandas``.
     Examples
     --------
 
@@ -115,7 +119,7 @@ def to_snowflake(
     # right partner application ID.
     ensure_db_exists(df._meta, name, connection_kwargs).compute()
     parts = [
-        write_snowflake(partition, name, connection_kwargs)
+        write_snowflake(partition, name, connection_kwargs, write_pandas_kwargs)
         for partition in df.to_delayed()
     ]
     if compute:

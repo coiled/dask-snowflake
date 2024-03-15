@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from functools import partial
-from typing import Sequence
+from typing import Optional, Sequence
 
 import pandas as pd
 import pyarrow as pa
@@ -23,7 +23,10 @@ from dask.utils import parse_bytes
 
 @delayed
 def write_snowflake(
-    df: pd.DataFrame, name: str, connection_kwargs: dict, write_pandas_kwargs: dict = {}
+    df: pd.DataFrame,
+    name: str,
+    connection_kwargs: dict,
+    write_pandas_kwargs: Optional[dict] = None,
 ):
     connection_kwargs = {
         **{"application": dask.config.get("snowflake.partner", "dask")},
@@ -37,7 +40,7 @@ def write_snowflake(
             # NOTE: since ensure_db_exists uses uppercase for the table name
             table_name=name.upper(),
             quote_identifiers=False,
-            **write_pandas_kwargs,
+            **(write_pandas_kwargs or {}),
         )
 
 
@@ -72,7 +75,7 @@ def to_snowflake(
     df: dd.DataFrame,
     name: str,
     connection_kwargs: dict,
-    write_pandas_kwargs: dict = {},
+    write_pandas_kwargs: Optional[dict] = None,
     compute: bool = True,
 ):
     """Write a Dask DataFrame to a Snowflake table.

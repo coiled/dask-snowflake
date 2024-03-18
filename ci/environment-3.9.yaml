@@ -6,13 +6,9 @@ dependencies:
   - python=3.9
   - dask
   - distributed
-  # `pandas=2.2` dropped support for `sqlalchemy<2`, but `snowflake-sqlalchemy`
-  # doesn't support `sqlalchemy>=2` yet. Temporarily pinning `pandas<2.2` for now.
-  # xref https://github.com/pandas-dev/pandas/issues/57049
-  # xref https://github.com/snowflakedb/snowflake-sqlalchemy/issues/380
-  - pandas<2.2
+  - pandas
   - pyarrow
-  - snowflake-connector-python >=2.6.0
+  - snowflake-connector-python >=2.7.3
   - snowflake-sqlalchemy
   # Testing
   - pytest

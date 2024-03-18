@@ -6,10 +6,8 @@ from typing import Optional, Sequence
 import pandas as pd
 import pyarrow as pa
 import snowflake.connector
-from snowflake.connector.pandas_tools import pd_writer, write_pandas
+from snowflake.connector.pandas_tools import write_pandas
 from snowflake.connector.result_batch import ArrowResultBatch
-from snowflake.sqlalchemy import URL
-from sqlalchemy import create_engine
 
 import dask
 import dask.dataframe as dd
@@ -37,38 +35,11 @@ def write_snowflake(
             conn=conn,
             df=df,
             schema=connection_kwargs.get("schema", None),
-            # NOTE: since ensure_db_exists uses uppercase for the table name
             table_name=name.upper(),
             quote_identifiers=False,
+            auto_create_table=True,
             **(write_pandas_kwargs or {}),
         )
-
-
-@delayed
-def ensure_db_exists(
-    df: pd.DataFrame,
-    name: str,
-    connection_kwargs,
-):
-    connection_kwargs = {
-        **{"application": dask.config.get("snowflake.partner", "dask")},
-        **connection_kwargs,
-    }
-    # NOTE: we have a separate `ensure_db_exists` function in order to use
-    # pandas' `to_sql` which will create a table if the requested one doesn't
-    # already exist. However, we don't always want to use Snowflake's `pd_writer`
-    # approach because it doesn't allow us disable parallel file uploading.
-    # For these cases we use a separate `write_snowflake` function.
-    engine = create_engine(URL(**connection_kwargs))
-    # # NOTE: pd_writer will automatically uppercase the table name
-    df.to_sql(
-        name=name,
-        schema=connection_kwargs.get("schema", None),
-        con=engine,
-        index=False,
-        if_exists="append",
-        method=pd_writer,
-    )
 
 
 def to_snowflake(
@@ -111,13 +82,6 @@ def to_snowflake(
     ... )
 
     """
-    # Write the DataFrame meta to ensure table exists before
-    # trying to write all partitions in parallel. Otherwise
-    # we run into race conditions around creating a new table.
-    # Also, some clusters will overwrite the `snowflake.partner` configuration value.
-    # We run `ensure_db_exists` on the cluster to ensure we capture the
-    # right partner application ID.
-    ensure_db_exists(df._meta, name, connection_kwargs).compute()
     parts = [
         write_snowflake(partition, name, connection_kwargs, write_pandas_kwargs)
         for partition in df.to_delayed()

@@ -159,8 +159,8 @@ def test_application_id_default(table, connection_kwargs, monkeypatch):
     monkeypatch.setattr(snowflake.connector, "connect", mock_connect)
 
     to_snowflake(ddf, name=table, connection_kwargs=connection_kwargs)
-    # One extra connection is made to ensure the DB table exists
-    count_after_write = ddf.npartitions + 1
+    # One connection is made for writing each partition
+    count_after_write = ddf.npartitions
     assert count == count_after_write
 
     ddf_out = read_snowflake(
@@ -184,8 +184,8 @@ def test_application_id_config(table, connection_kwargs, monkeypatch):
         monkeypatch.setattr(snowflake.connector, "connect", mock_connect)
 
         to_snowflake(ddf, name=table, connection_kwargs=connection_kwargs)
-        # One extra connection is made to ensure the DB table exists
-        count_after_write = ddf.npartitions + 1
+        # One connection is made for writing each partition
+        count_after_write = ddf.npartitions
         assert count == count_after_write
 
         ddf_out = read_snowflake(
@@ -221,8 +221,8 @@ def test_application_id_config_on_cluster(table, connection_kwargs, client):
         client.run(patch_snowflake_connect)
 
         to_snowflake(ddf, name=table, connection_kwargs=connection_kwargs)
-        # One extra connection is made to ensure the DB table exists
-        count_after_write = ddf.npartitions + 1
+        # One connection is made for writing each partition
+        count_after_write = ddf.npartitions
 
         ddf_out = read_snowflake(
             f"SELECT * FROM {table}", connection_kwargs=connection_kwargs, npartitions=2
@@ -250,8 +250,8 @@ def test_application_id_explicit(table, connection_kwargs, monkeypatch):
     monkeypatch.setattr(snowflake.connector, "connect", mock_connect)
 
     to_snowflake(ddf, name=table, connection_kwargs=connection_kwargs)
-    # One extra connection is made to ensure the DB table exists
-    count_after_write = ddf.npartitions + 1
+    # One connection is made for writing each partition
+    count_after_write = ddf.npartitions
     assert count == count_after_write
 
     ddf_out = read_snowflake(

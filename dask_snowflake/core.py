@@ -314,12 +314,12 @@ def read_snowflake(
         batches, meta, npartitions=npartitions, partition_size=partition_size
     )
 
-    divisions = tuple([None] * (len(batches_partitioned) + 1))
+    # divisions = tuple([None] * (len(batches_partitioned) + 1))
 
     return dd.from_map(
         partial(_fetch_batches, arrow_options=arrow_options),
         batches_partitioned,
-        npartitions=divisions,
+        # npartitions=divisions,
         meta=meta,
     )
 

@@ -280,12 +280,6 @@ def read_snowflake(
     batches = _fetch_query_batches(query, connection_kwargs, execute_params).compute()
     if not batches:
         return dd.from_pandas(pd.DataFrame(), npartitions=1)
-    # if not batches:
-    #     # Empty results set -> return an empty DataFrame
-    #     meta = dd.utils.make_meta({})
-    #     graph = {(output_name, 0): meta}
-    #     divisions = (None, None)
-    #     return new_dd_object(graph, output_name, meta, divisions)
 
     batch_types = set(type(b) for b in batches)
     if len(batch_types) > 1 or next(iter(batch_types)) is not ArrowResultBatch:
@@ -306,13 +300,14 @@ def read_snowflake(
     )
 
     # Legacy check
+    # if new enough dask version we use from_map
     if hasattr(dd, "from_map"):
         return dd.from_map(
             partial(_fetch_batches, arrow_options=arrow_options),
             batches_partitioned,
             meta=meta,
         )
-
+    # if not revert to exising method
     else:
         label = "read-snowflake-"
         output_name = label + tokenize(

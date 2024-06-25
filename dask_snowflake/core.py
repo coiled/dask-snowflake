@@ -13,11 +13,13 @@ from sqlalchemy import create_engine
 
 import dask
 import dask.dataframe as dd
-from dask.base import tokenize
-from dask.dataframe.core import new_dd_object
+
+# from dask.base import tokenize
+# from dask.dataframe.core import new_dd_object
 from dask.delayed import delayed
-from dask.highlevelgraph import HighLevelGraph
-from dask.layers import DataFrameIOLayer
+
+# from dask.highlevelgraph import HighLevelGraph
+# from dask.layers import DataFrameIOLayer
 from dask.utils import parse_bytes
 
 
@@ -317,10 +319,9 @@ def read_snowflake(
     return dd.from_map(
         partial(_fetch_batches, arrow_options=arrow_options),
         batches_partitioned,
-        npartitions = divisions,
+        npartitions=divisions,
         meta=meta,
     )
-
 
     # # Create Blockwise layer
     # layer = DataFrameIOLayer(

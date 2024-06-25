@@ -13,13 +13,11 @@ from sqlalchemy import create_engine
 
 import dask
 import dask.dataframe as dd
-
-# from dask.base import tokenize
-# from dask.dataframe.core import new_dd_object
+from dask.base import tokenize
+from dask.dataframe.core import new_dd_object
 from dask.delayed import delayed
-
-# from dask.highlevelgraph import HighLevelGraph
-# from dask.layers import DataFrameIOLayer
+from dask.highlevelgraph import HighLevelGraph
+from dask.layers import DataFrameIOLayer
 from dask.utils import parse_bytes
 
 
@@ -265,13 +263,6 @@ def read_snowflake(
     if partition_size is None and npartitions is None:
         partition_size = "100MiB"
 
-    # label = "read-snowflake-"
-    # output_name = label + tokenize(
-    #     query,
-    #     connection_kwargs,
-    #     arrow_options,
-    # )
-
     # Disable `log_imported_packages_in_telemetry` as a temporary workaround for
     # https://github.com/snowflakedb/snowflake-connector-python/issues/1648.
     # Also xref https://github.com/coiled/dask-snowflake/issues/51.
@@ -314,23 +305,30 @@ def read_snowflake(
         batches, meta, npartitions=npartitions, partition_size=partition_size
     )
 
-    # divisions = tuple([None] * (len(batches_partitioned) + 1))
+    # Legacy check
+    if hasattr(dd, "from_map"):
+        return dd.from_map(
+            partial(_fetch_batches, arrow_options=arrow_options),
+            batches_partitioned,
+            meta=meta,
+        )
 
-    return dd.from_map(
-        partial(_fetch_batches, arrow_options=arrow_options),
-        batches_partitioned,
-        # npartitions=divisions,
-        meta=meta,
-    )
-
-    # # Create Blockwise layer
-    # layer = DataFrameIOLayer(
-    #     output_name,
-    #     meta.columns,
-    #     batches_partitioned,
-    #     # TODO: Implement wrapper to only convert columns requested
-    #     partial(_fetch_batches, arrow_options=arrow_options),
-    #     label=label,
-    # )
-    # graph = HighLevelGraph({output_name: layer}, {output_name: set()})
-    # return new_dd_object(graph, output_name, meta, divisions)
+    else:
+        label = "read-snowflake-"
+        output_name = label + tokenize(
+            query,
+            connection_kwargs,
+            arrow_options,
+        )
+        divisions = tuple([None] * (len(batches_partitioned) + 1))
+        # Create Blockwise layer
+        layer = DataFrameIOLayer(
+            output_name,
+            meta.columns,
+            batches_partitioned,
+            # TODO: Implement wrapper to only convert columns requested
+            partial(_fetch_batches, arrow_options=arrow_options),
+            label=label,
+        )
+        graph = HighLevelGraph({output_name: layer}, {output_name: set()})
+        return new_dd_object(graph, output_name, meta, divisions)

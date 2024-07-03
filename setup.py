@@ -13,7 +13,7 @@ setup(
     packages=["dask_snowflake"],
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
-    python_requires=">=3.7",
+    python_requires=">=3.9",
     install_requires=open("requirements.txt").read().strip().split("\n"),
     include_package_data=True,
     zip_safe=False,

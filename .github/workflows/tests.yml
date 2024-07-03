@@ -3,7 +3,6 @@ name: Tests
 on:
   push:
   workflow_dispatch:
-
 jobs:
   test:
     runs-on: ${{ matrix.os }}
@@ -14,7 +13,7 @@ jobs:
       fail-fast: false
       matrix:
         os: ["windows-latest", "ubuntu-latest", "macos-latest"]
-        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
         exclude:
           # Python 3.11 build on macOS times out for some reason
           # xref https://github.com/coiled/dask-snowflake/pull/56

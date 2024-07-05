@@ -1,4 +1,4 @@
-dask>=2021.05.0
+dask>=2024.3.0
 distributed
 snowflake-connector-python[pandas]>=2.6.0
 snowflake-sqlalchemy

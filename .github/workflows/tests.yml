@@ -18,8 +18,7 @@ jobs:
           # Python 3.11 build on macOS times out for some reason
           # xref https://github.com/coiled/dask-snowflake/pull/56
           - os: macos-latest
-            python-version: ["3.9", "3.10","3.11"]
-
+            python-version: "3.11"
     steps:
       - name: Checkout source
         uses: actions/checkout@v2

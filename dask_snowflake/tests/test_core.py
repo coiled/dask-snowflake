@@ -29,7 +29,8 @@ def table(connection_kwargs):
     yield name
 
     engine = create_engine(URL(**connection_kwargs))
-    engine.execute(f"DROP TABLE IF EXISTS {name}")
+    with engine.connect() as connection:
+        connection.execute(f"DROP TABLE IF EXISTS {name}")
 
 
 @pytest.fixture(scope="module")

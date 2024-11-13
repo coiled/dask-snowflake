@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 import snowflake.connector
 from snowflake.sqlalchemy import URL
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 
 import dask
 import dask.dataframe as dd
@@ -30,7 +30,7 @@ def table(connection_kwargs):
 
     engine = create_engine(URL(**connection_kwargs))
     with engine.connect() as conn:
-        conn.execute(f"DROP TABLE IF EXISTS {name}")
+        conn.execute(text(f"DROP TABLE IF EXISTS {name}"))
 
 
 @pytest.fixture(scope="module")
